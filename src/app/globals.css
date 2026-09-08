@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #080b13;
+  --foreground: #e8ecf6;
+  color-scheme: dark;
+}
+
+body {
+  color: var(--foreground);
+  background:
+    radial-gradient(1100px 600px at 15% -10%, rgba(99, 102, 241, 0.14), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(16, 185, 129, 0.08), transparent 55%),
+    var(--background);
+  background-attachment: fixed;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line bg-surface shadow-card;
+  }
+  .card-soft {
+    @apply rounded-2xl border border-line/70 bg-surface-soft;
+  }
+  .field {
+    @apply w-full rounded-lg border border-line bg-surface-strong px-3 py-2 text-sm text-foreground outline-none transition
+      placeholder:text-slate-500 focus:border-brand focus:ring-1 focus:ring-brand;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white
+      transition hover:bg-brand-soft disabled:opacity-60;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line px-3 py-1.5 text-sm font-medium
+      text-slate-300 transition hover:bg-surface-strong hover:text-white;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+}
+
+/* Per-category accent gradients (referenced from lib/kpi.ts class strings). */
+.grad-freebox {
+  background-image: linear-gradient(135deg, #7c3aed 0%, #4f46e5 55%, #2563eb 100%);
+}
+.grad-forfaits {
+  background-image: linear-gradient(135deg, #2563eb 0%, #0ea5e9 60%, #22d3ee 100%);
+}
+.grad-telephones {
+  background-image: linear-gradient(135deg, #059669 0%, #10b981 55%, #34d399 100%);
+}
+.grad-primes {
+  background-image: linear-gradient(135deg, #b45309 0%, #d97706 45%, #facc15 100%);
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #26314a;
+  border-radius: 999px;
+}
