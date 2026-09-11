@@ -53,6 +53,12 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
    ```sql
    select recalculer_primes_boutique(id) from shops;
    ```
+5. `migrations/004_fix_recalculer_prime_jour.sql` — correctif :
+   `recalculer_prime_jour()` (définie en 003) avait un `INSERT` à 5 colonnes
+   mais une liste `SELECT` de 4 expressions (`now()` manquant), ce qui faisait
+   échouer `recalculer_primes_boutique(...)` avec `INSERT has more target
+   columns than expressions`. Recrée uniquement cette fonction (idempotent).
+   Relancez ensuite `select recalculer_primes_boutique(id) from shops;`.
 
 > Chaque section (Challenges, Planning, primes à paliers) se dégrade
 > proprement (bandeau d'avertissement) si sa migration n'a pas encore été

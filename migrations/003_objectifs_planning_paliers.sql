@@ -255,7 +255,8 @@ begin
         v.quantity * coalesce(st.montant_base, rp.montant_par_acte, 0)
       + case when v.has_mcafee    then v.quantity * coalesce(rp.bonus_mcafee, 0)    else 0 end
       + case when v.has_assurance then v.quantity * coalesce(rp.bonus_assurance, 0) else 0 end
-    ), 0)
+    ), 0),
+    now()
   from ventes v
   left join sous_types_actes st on st.id = v.sous_type_id
   left join regles_primes rp   on rp.shop_id = v_shop and rp.acte_type = v.acte_type
