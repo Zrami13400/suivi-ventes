@@ -27,7 +27,22 @@ export async function createVente(
   const has_assurance =
     acte_type === ACTE_A_ASSURANCE && formData.get("has_assurance") === "on";
 
+  const sousTypeRaw = String(formData.get("sous_type_id") ?? "").trim();
   const supabase = createClient();
+
+  // Vérifie que le sous-type appartient bien à la boutique et au type d'acte.
+  let sous_type_id: string | null = null;
+  if (sousTypeRaw) {
+    const { data: st } = await supabase
+      .from("sous_types_actes")
+      .select("id, acte_type, shop_id")
+      .eq("id", sousTypeRaw)
+      .maybeSingle();
+    if (st && st.shop_id === profile.shop_id && st.acte_type === acte_type) {
+      sous_type_id = st.id;
+    }
+  }
+
   const { error } = await supabase.from("ventes").insert({
     vendeur_id: profile.id,
     shop_id: profile.shop_id,
@@ -35,16 +50,22 @@ export async function createVente(
     quantity,
     has_mcafee,
     has_assurance,
+    sous_type_id,
   });
 
   if (error) {
     return { error: error.message, success: false };
   }
 
-  revalidatePath("/dashboard");
-  revalidatePath("/ventes");
-  revalidatePath("/objectifs");
-  revalidatePath("/classement");
-  revalidatePath("/profil");
+  for (const p of [
+    "/dashboard",
+    "/ventes",
+    "/objectifs",
+    "/classement",
+    "/profil",
+    "/admin",
+  ]) {
+    revalidatePath(p);
+  }
   return { error: null, success: true };
 }

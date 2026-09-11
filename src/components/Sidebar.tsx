@@ -24,6 +24,8 @@ const ICONS = {
   user: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-8 9a8 8 0 0 1 16 0",
   shield: "M12 3l8 3v6c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V6l8-3Z",
   chart: "M4 20V10m6 10V4m6 16v-7m6 7V8",
+  calendar:
+    "M7 3v3m10-3v3M4 8h16M5 5.5h14A1.5 1.5 0 0 1 20.5 7v12A1.5 1.5 0 0 1 19 20.5H5A1.5 1.5 0 0 1 3.5 19V7A1.5 1.5 0 0 1 5 5.5Z",
 } as const;
 
 function Icon({ d, className }: { d: string; className?: string }) {
@@ -49,6 +51,7 @@ export const SELLER_NAV: NavItem[] = [
   { href: "/ventes", label: "Mes ventes / Actes", icon: "cart" },
   { href: "/classement", label: "Classement", icon: "trophy" },
   { href: "/challenges", label: "Challenges", icon: "swords" },
+  { href: "/planning", label: "Planning", icon: "calendar" },
   { href: "/profil", label: "Mon profil", icon: "user" },
 ];
 

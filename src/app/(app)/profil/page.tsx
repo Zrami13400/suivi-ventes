@@ -9,12 +9,15 @@ import {
 } from "@/lib/format";
 import {
   actesParCategorie,
+  computeCommission,
   niveauPourActes,
-  primeParts,
   prochainNiveau,
   totalActes,
+  type CommissionBreakdown as Breakdown,
 } from "@/lib/kpi";
 import { BADGES, NIVEAUX } from "@/lib/constants";
+import { CommissionBreakdown } from "@/components/CommissionBreakdown";
+import { joursTravailles } from "@/lib/planning";
 import { loadShopMonth } from "@/lib/shop-month";
 
 export const dynamic = "force-dynamic";
@@ -39,9 +42,10 @@ export default async function ProfilPage() {
   const mois = currentMonth();
   const sm = await loadShopMonth(profile.shop_id, mois);
   const mine = sm.ventesByVendeur.get(profile.id) ?? [];
-  const primes = sm.primesByVendeur.get(profile.id) ?? [];
+  const primesJour = sm.primesJourByVendeur.get(profile.id) ?? [];
   const stats = sm.ranking.find((r) => r.vendeur.id === profile.id);
   const badges = sm.badges.get(profile.id) ?? [];
+  const myPlanning = sm.planningByVendeur.get(profile.id) ?? [];
 
   const actesMois = totalActes(mine);
   const niv = niveauPourActes(actesMois);
@@ -50,8 +54,30 @@ export default async function ProfilPage() {
     ? pct(actesMois - niv.min, next.min - niv.min)
     : 100;
 
-  const parts = primeParts(mine, sm.regles);
-  const primeMois = primes.reduce((s, p) => s + Number(p.prime_calculee ?? 0), 0);
+  const primeMensuelle = sm.primeMensuelleByVendeur.get(profile.id) ?? null;
+  const computed = computeCommission(mine, sm.ventes, {
+    priceBook: sm.priceBook,
+    regles: sm.regles,
+    paliers: sm.paliers,
+    objectifsBoutiqueMois: sm.objectifsBoutiqueMois,
+  });
+  const breakdown: Breakdown = primeMensuelle
+    ? {
+        base: primeMensuelle.prime_base,
+        boostIndividuel: primeMensuelle.boost_individuel,
+        boostCollectif: primeMensuelle.boost_collectif,
+        bonusMcafee: primeMensuelle.bonus_mcafee,
+        bonusAssurance: primeMensuelle.bonus_assurance,
+        total: primeMensuelle.prime_totale,
+        totalActes: primeMensuelle.total_actes,
+      }
+    : computed;
+
+  const joursTravaillesMois = joursTravailles(
+    myPlanning,
+    sm.range.start.slice(0, 10),
+    sm.range.end.slice(0, 10),
+  );
 
   const { start, end } = weekRange();
   const wStart = start.toISOString().slice(0, 10);
@@ -60,7 +86,7 @@ export default async function ProfilPage() {
     const d = v.created_at.slice(0, 10);
     return d >= wStart && d < wEnd;
   });
-  const weekPrime = primes
+  const weekPrime = primesJour
     .filter((p) => p.date >= wStart && p.date < wEnd)
     .reduce((s, p) => s + Number(p.prime_calculee ?? 0), 0);
 
@@ -72,7 +98,7 @@ export default async function ProfilPage() {
       const d = new Date();
       d.setDate(d.getDate() - (6 - i));
       const iso = d.toISOString().slice(0, 10);
-      const row = primes.find((p) => p.date === iso);
+      const row = primesJour.find((p) => p.date === iso);
       return { iso, prime: Number(row?.prime_calculee ?? 0), actes: Number(row?.total_ventes ?? 0) };
     });
   const max7 = Math.max(1, ...last7.map((d) => d.prime));
@@ -149,18 +175,17 @@ export default async function ProfilPage() {
         </Card>
       </div>
 
-      <Card>
-        <SectionTitle>Mes primes — {monthLabel(mois)} · privé</SectionTitle>
-        <div className="grid gap-3 sm:grid-cols-5">
-          <PrimeBox label="Total" value={primeMois || parts.total} strong />
-          <PrimeBox label="Box" value={parts.box} />
-          <PrimeBox label="Forfaits" value={parts.forfaits} />
-          <PrimeBox label="Téléphones" value={parts.telephones} />
-          <PrimeBox label="McAfee" value={parts.mcafee} />
-        </div>
+      <CommissionBreakdown
+        data={breakdown}
+        title={`Mes primes — ${monthLabel(mois)}`}
+      />
+      <p className="-mt-4 text-xs text-slate-500">
+        {joursTravaillesMois} jour(s) travaillé(s) ce mois (planning).
+      </p>
 
-        <p className="mt-5 text-xs font-medium uppercase tracking-wide text-slate-500">
-          7 derniers jours
+      <Card>
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          7 derniers jours (prime de base, hors boosts mensuels)
         </p>
         <div className="mt-2 flex items-end gap-2">
           {last7.map((d) => (
@@ -248,33 +273,6 @@ function Line({ label, value }: { label: string; value: number }) {
     <div className="flex items-center justify-between">
       <dt className="text-slate-400">{label}</dt>
       <dd className="font-medium tabular-nums text-white">{value}</dd>
-    </div>
-  );
-}
-
-function PrimeBox({
-  label,
-  value,
-  strong,
-}: {
-  label: string;
-  value: number;
-  strong?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-lg border p-3 ${
-        strong ? "border-amber-500/30 bg-amber-500/10" : "border-line bg-surface-strong"
-      }`}
-    >
-      <p className="text-xs text-slate-400">{label}</p>
-      <p
-        className={`mt-0.5 font-bold tabular-nums ${
-          strong ? "text-amber-300" : "text-white"
-        }`}
-      >
-        {formatMoney(value)}
-      </p>
     </div>
   );
 }

@@ -14,10 +14,10 @@ import {
   ligneCommission,
   objectifJourParCategorie,
   objectifJourVendeur,
-  reglesByActe,
   totalActes,
 } from "@/lib/kpi";
 import { CATEGORIES } from "@/lib/constants";
+import { joursTravailles } from "@/lib/planning";
 import { loadShopMonth } from "@/lib/shop-month";
 
 export const dynamic = "force-dynamic";
@@ -35,15 +35,26 @@ export default async function VentesPage() {
 
   const catMonth = actesParCategorie(mine);
   const catToday = actesParCategorie(mineToday);
-  const dailyTarget = objectifJourVendeur(sm.objectifs, profile.id, today);
+  const myPlanning = sm.planningByVendeur.get(profile.id) ?? [];
+  const joursTrav = joursTravailles(
+    myPlanning,
+    sm.range.start.slice(0, 10),
+    today,
+  );
+  const dailyTarget = objectifJourVendeur(
+    sm.objectifs,
+    profile.id,
+    today,
+    joursTrav || null,
+  );
   const objCat = objectifJourParCategorie(dailyTarget, categoryMix(mine));
-  const byActe = reglesByActe(sm.regles);
+  const pb = sm.priceBook;
 
   return (
     <div className="space-y-6">
       <Card>
         <SectionTitle>Enregistrer un acte</SectionTitle>
-        <SaleForm />
+        <SaleForm sousTypes={sm.sousTypes} />
       </Card>
 
       <div>
@@ -109,7 +120,7 @@ export default async function VentesPage() {
                     <th className="px-4 py-3 font-medium">Catégorie</th>
                     <th className="px-4 py-3 font-medium">Qté</th>
                     <th className="px-4 py-3 font-medium">Options</th>
-                    <th className="px-4 py-3 text-right font-medium">Prime</th>
+                    <th className="px-4 py-3 text-right font-medium">Prime base</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line/60">
@@ -143,7 +154,7 @@ export default async function VentesPage() {
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-amber-300">
-                        {formatMoney(ligneCommission(v, byActe.get(v.acte_type)))}
+                        {formatMoney(ligneCommission(v, pb))}
                       </td>
                     </tr>
                   ))}
@@ -153,9 +164,10 @@ export default async function VentesPage() {
           )}
         </Card>
         <p className="mt-2 text-xs text-slate-500">
-          Le montant des primes n&apos;est visible que par toi (et
-          l&apos;administrateur). Les actes, eux, comptent pour le classement de
-          l&apos;équipe.
+          « Prime base » = montant du sous-produit + bonus option, hors boosts
+          mensuels. Le détail complet (boost individuel / collectif) est sur ton
+          tableau de bord. Les primes restent privées ; les actes comptent pour
+          le classement.
         </p>
       </div>
     </div>

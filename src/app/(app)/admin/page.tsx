@@ -26,14 +26,11 @@ export default async function AdminOverviewPage({
   const sm = await loadShopMonth(admin.shop_id, mois);
 
   const ventesToday = sm.ventes.filter((v) => v.created_at.slice(0, 10) === today);
-  const moisObj =
-    sm.objectifs.find(
-      (o) =>
-        o.periode === "mois" &&
-        o.vendeur_id === null &&
-        o.date_debut <= today &&
-        o.date_fin >= today,
-    )?.nb_ventes_cible ?? null;
+  const moisObjSum =
+    (sm.objectifsBoutiqueMois["Freebox"] ?? 0) +
+    (sm.objectifsBoutiqueMois["Forfait mobile"] ?? 0) +
+    (sm.objectifsBoutiqueMois["Téléphone"] ?? 0);
+  const moisObj = moisObjSum > 0 ? moisObjSum : null;
 
   const realiseMois = totalActes(sm.ventes);
   const primesMois = sm.ranking.reduce((s, r) => s + r.prime, 0);
@@ -75,7 +72,7 @@ export default async function AdminOverviewPage({
             CA commission (mois)
           </p>
           <p className="mt-2 text-2xl font-bold text-white tabular-nums">
-            {formatMoney(totalCommission(sm.ventes, sm.regles))}
+            {formatMoney(totalCommission(sm.ventes, sm.priceBook))}
           </p>
         </Card>
       </div>
@@ -103,7 +100,7 @@ export default async function AdminOverviewPage({
             CA du jour (commission)
           </p>
           <p className="mt-2 text-xl font-bold text-amber-300 tabular-nums">
-            {formatMoney(totalCommission(ventesToday, sm.regles))}
+            {formatMoney(totalCommission(ventesToday, sm.priceBook))}
           </p>
         </Card>
       </div>

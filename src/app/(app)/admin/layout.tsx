@@ -5,6 +5,7 @@ const TABS = [
   { href: "/admin", label: "Vue d'ensemble" },
   { href: "/admin/objectifs", label: "Objectifs" },
   { href: "/admin/primes", label: "Règles de primes" },
+  { href: "/admin/planning", label: "Planning" },
   { href: "/admin/challenges", label: "Challenges" },
 ];
 

@@ -5,21 +5,35 @@ import { createClient } from "@/lib/supabase/client";
 import { formatMoney, pct } from "@/lib/format";
 import {
   actesParCategorie,
+  computeCommission,
   objectifJourParCategorie,
-  primeParts,
+  priceBook,
   totalActes,
   type CatKey,
+  type CommissionBreakdown as Breakdown,
 } from "@/lib/kpi";
 import { CATEGORIES } from "@/lib/constants";
-import type { PrimeJournaliere, ReglePrime, Vente } from "@/lib/types";
-import { Card, ProgressBar, cx } from "./ui";
+import type {
+  PalierPrime,
+  PrimeMensuelle,
+  ReglePrime,
+  SousTypeActe,
+  Vente,
+} from "@/lib/types";
+import { CommissionBreakdown } from "./CommissionBreakdown";
+import { ProgressBar, cx } from "./ui";
 
 interface Props {
   vendeurId: string;
   today: string;
+  moisDate: string;
   regles: ReglePrime[];
-  initialVentes: Vente[];
-  initialPrime: PrimeJournaliere | null;
+  paliers: PalierPrime[];
+  sousTypes: SousTypeActe[];
+  objectifsBoutiqueMois: Partial<Record<string, number>>;
+  initialSellerVentesMois: Vente[];
+  initialShopVentesMois: Vente[];
+  initialPrimeMensuelle: PrimeMensuelle | null;
   shop: {
     objectifBoutiqueJour: number;
     actesBoutiqueJour: number;
@@ -32,15 +46,25 @@ interface Props {
 export default function AccueilClient({
   vendeurId,
   today,
+  moisDate,
   regles,
-  initialVentes,
-  initialPrime,
+  paliers,
+  sousTypes,
+  objectifsBoutiqueMois,
+  initialSellerVentesMois,
+  initialShopVentesMois,
+  initialPrimeMensuelle,
   shop,
   sellerDailyTarget,
   mix,
 }: Props) {
-  const [ventes, setVentes] = useState<Vente[]>(initialVentes);
-  const [prime, setPrime] = useState<PrimeJournaliere | null>(initialPrime);
+  const [sellerVentes, setSellerVentes] = useState<Vente[]>(
+    initialSellerVentesMois,
+  );
+  const [shopVentes, setShopVentes] = useState<Vente[]>(initialShopVentesMois);
+  const [primeMensuelle, setPrimeMensuelle] = useState<PrimeMensuelle | null>(
+    initialPrimeMensuelle,
+  );
   const [live, setLive] = useState(false);
 
   useEffect(() => {
@@ -52,12 +76,14 @@ export default function AccueilClient({
         {
           event: "*",
           schema: "public",
-          table: "primes_journalieres",
+          table: "primes_mensuelles",
           filter: `vendeur_id=eq.${vendeurId}`,
         },
         (payload) => {
-          const row = payload.new as PrimeJournaliere;
-          if (row && row.date === today) setPrime(row);
+          const row = payload.new as PrimeMensuelle;
+          if (row && row.mois?.slice(0, 7) === moisDate.slice(0, 7)) {
+            setPrimeMensuelle(row);
+          }
         },
       )
       .on(
@@ -70,9 +96,12 @@ export default function AccueilClient({
         },
         (payload) => {
           const row = payload.new as Vente;
-          if (row && row.created_at.slice(0, 10) === today) {
-            setVentes((prev) =>
-              prev.some((v) => v.id === row.id) ? prev : [row, ...prev],
+          if (row && row.created_at.slice(0, 7) === moisDate.slice(0, 7)) {
+            setSellerVentes((p) =>
+              p.some((v) => v.id === row.id) ? p : [row, ...p],
+            );
+            setShopVentes((p) =>
+              p.some((v) => v.id === row.id) ? p : [row, ...p],
             );
           }
         },
@@ -82,14 +111,44 @@ export default function AccueilClient({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [vendeurId, today]);
+  }, [vendeurId, moisDate]);
 
-  const ownActes = totalActes(ventes);
-  const parCat = useMemo(() => actesParCategorie(ventes), [ventes]);
-  const parts = useMemo(() => primeParts(ventes, regles), [ventes, regles]);
-  const primeEstimee = prime?.prime_calculee ?? parts.total;
+  const pb = useMemo(
+    () => priceBook(sousTypes, regles),
+    [sousTypes, regles],
+  );
+
+  const computed = useMemo(
+    () =>
+      computeCommission(sellerVentes, shopVentes, {
+        priceBook: pb,
+        regles,
+        paliers,
+        objectifsBoutiqueMois,
+      }),
+    [sellerVentes, shopVentes, pb, regles, paliers, objectifsBoutiqueMois],
+  );
+
+  // La ligne DB fait foi dès qu'elle a intégré toutes les ventes connues.
+  const breakdown: Breakdown =
+    primeMensuelle && primeMensuelle.total_actes >= computed.totalActes
+      ? {
+          base: primeMensuelle.prime_base,
+          boostIndividuel: primeMensuelle.boost_individuel,
+          boostCollectif: primeMensuelle.boost_collectif,
+          bonusMcafee: primeMensuelle.bonus_mcafee,
+          bonusAssurance: primeMensuelle.bonus_assurance,
+          total: primeMensuelle.prime_totale,
+          totalActes: primeMensuelle.total_actes,
+        }
+      : computed;
+
+  const ventesToday = sellerVentes.filter(
+    (v) => v.created_at.slice(0, 10) === today,
+  );
+  const ownActesToday = totalActes(ventesToday);
+  const parCatToday = actesParCategorie(ventesToday);
   const objCat = objectifJourParCategorie(sellerDailyTarget, mix);
-
   const boutiquePct = pct(shop.actesBoutiqueJour, shop.objectifBoutiqueJour);
 
   return (
@@ -104,7 +163,6 @@ export default function AccueilClient({
         {live ? "Mise à jour en temps réel" : "Connexion temps réel…"}
       </div>
 
-      {/* 4 KPI cards */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi
           label="Objectif boutique"
@@ -116,33 +174,32 @@ export default function AccueilClient({
           label="CA du jour"
           value={formatMoney(shop.caBoutiqueJour)}
           badge={`${boutiquePct}%`}
-          footText="Estimé depuis le barème de commission"
+          footText="Estimé depuis le barème (base + bonus)"
         />
         <Kpi
           label="Primes estimées"
-          value={formatMoney(primeEstimee)}
-          accent="grad-primes"
-          footText="Ta commission individuelle du jour"
+          value={formatMoney(breakdown.total)}
+          accent
+          footText="Ta commission individuelle ce mois-ci"
         />
         <Kpi
           label="Total actes du jour"
-          value={String(ownActes)}
+          value={String(ownActesToday)}
           footText="Tes actes enregistrés aujourd'hui"
         />
       </div>
 
-      {/* Sales / Actes */}
       <div>
         <h2 className="mb-3 text-base font-semibold text-white">
           Mes ventes du jour
         </h2>
         <div className="grid gap-4 lg:grid-cols-3">
           {CATEGORIES.map((c) => {
-            const realise = parCat[c.key];
+            const realise = parCatToday[c.key];
             const cible = objCat[c.key];
             const p = pct(realise, cible);
             return (
-              <Card key={c.key} className="overflow-hidden">
+              <div key={c.key} className="card overflow-hidden p-5">
                 <div className={cx("-m-5 mb-4 p-4 text-white", c.grad)}>
                   <p className="text-sm font-semibold uppercase tracking-wide">
                     {c.label}
@@ -165,40 +222,18 @@ export default function AccueilClient({
                   ))}
                   {c.options.map((o) => (
                     <li key={o} className="flex items-center gap-1.5">
-                      <span className={cx("h-1 w-1 rounded-full", "bg-brand-soft")} />
+                      <span className="h-1 w-1 rounded-full bg-brand-soft" />
                       Option : {o}
                     </li>
                   ))}
                 </ul>
-              </Card>
+              </div>
             );
           })}
         </div>
       </div>
 
-      {/* Primes — privé */}
-      <Card>
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-white">
-            Primes du jour <span className="text-xs font-normal text-slate-500">· privé</span>
-          </h2>
-          <span className="text-xl font-bold text-amber-300 tabular-nums">
-            {formatMoney(primeEstimee)}
-          </span>
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-4">
-          <PrimeLine label="Box" value={parts.box} />
-          <PrimeLine label="Forfaits" value={parts.forfaits} />
-          <PrimeLine label="Téléphones" value={parts.telephones} />
-          <PrimeLine label="McAfee" value={parts.mcafee} />
-        </div>
-        <a
-          href="/profil"
-          className="mt-4 inline-block text-sm font-medium text-brand-soft hover:underline"
-        >
-          Voir le détail →
-        </a>
-      </Card>
+      <CommissionBreakdown data={breakdown} />
     </div>
   );
 }
@@ -216,7 +251,7 @@ function Kpi({
   badge?: string;
   foot?: React.ReactNode;
   footText?: string;
-  accent?: string;
+  accent?: boolean;
 }) {
   return (
     <div className="card p-5">
@@ -225,20 +260,13 @@ function Kpi({
           {label}
         </p>
         {badge && (
-          <span
-            className={cx(
-              "chip text-white",
-              accent ?? "bg-brand/20 text-brand-soft",
-            )}
-          >
-            {badge}
-          </span>
+          <span className="chip bg-brand/20 text-brand-soft">{badge}</span>
         )}
       </div>
       <p
         className={cx(
           "mt-2 text-2xl font-bold tabular-nums text-white",
-          accent === "grad-primes" &&
+          accent &&
             "bg-gradient-to-r from-amber-300 to-yellow-200 bg-clip-text text-transparent",
         )}
       >
@@ -246,17 +274,6 @@ function Kpi({
       </p>
       {foot && <div className="mt-3">{foot}</div>}
       {footText && <p className="mt-1 text-xs text-slate-500">{footText}</p>}
-    </div>
-  );
-}
-
-function PrimeLine({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border border-line bg-surface-strong p-3">
-      <p className="text-xs text-slate-400">{label}</p>
-      <p className="mt-0.5 font-semibold tabular-nums text-white">
-        {formatMoney(value)}
-      </p>
     </div>
   );
 }

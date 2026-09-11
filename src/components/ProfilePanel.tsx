@@ -4,41 +4,41 @@ import {
   actesParCategorie,
   primeParts,
   totalActes,
+  type PriceBook,
   type RankRow,
 } from "@/lib/kpi";
 import { BADGES, type BadgeKey } from "@/lib/constants";
-import type { PrimeJournaliere, ReglePrime, Vente } from "@/lib/types";
+import type { PrimeJournaliere, Vente } from "@/lib/types";
 import { Avatar } from "./ui";
 
 interface Props {
   nomComplet: string;
   stats: RankRow | null;
   badges: BadgeKey[];
-  primesMonth: PrimeJournaliere[];
-  range: { start: string; end: string };
+  primesJour: PrimeJournaliere[];
   weekVentes?: Vente[];
-  regles?: ReglePrime[];
+  priceBook: PriceBook;
 }
 
 export function ProfilePanel({
   nomComplet,
   stats,
   badges,
-  primesMonth,
+  primesJour,
   weekVentes = [],
-  regles = [],
+  priceBook,
 }: Props) {
   const { start, end } = weekRange();
   const s = start.toISOString().slice(0, 10);
   const e = end.toISOString().slice(0, 10);
 
-  const weekPrime = primesMonth
+  const weekPrime = primesJour
     .filter((p) => p.date >= s && p.date < e)
     .reduce((sum, p) => sum + Number(p.prime_calculee ?? 0), 0);
 
   const weekActes = totalActes(weekVentes);
   const cat = actesParCategorie(weekVentes);
-  const parts = primeParts(weekVentes, regles);
+  const parts = primeParts(weekVentes, priceBook);
 
   return (
     <div className="card p-5">
@@ -57,11 +57,12 @@ export function ProfilePanel({
         <div className="rounded-lg border border-line bg-surface-strong p-3">
           <p className="text-xs text-slate-400">Cette semaine</p>
           <p className="mt-0.5 text-lg font-bold tabular-nums text-white">
-            {weekActes} <span className="text-xs font-normal text-slate-400">actes</span>
+            {weekActes}{" "}
+            <span className="text-xs font-normal text-slate-400">actes</span>
           </p>
         </div>
         <div className="rounded-lg border border-line bg-surface-strong p-3">
-          <p className="text-xs text-slate-400">Primes semaine</p>
+          <p className="text-xs text-slate-400">Primes semaine (base)</p>
           <p className="mt-0.5 text-lg font-bold tabular-nums text-amber-300">
             {formatMoney(weekPrime)}
           </p>

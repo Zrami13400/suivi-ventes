@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { createVente } from "@/app/(app)/dashboard/actions";
 import {
@@ -10,6 +10,7 @@ import {
   CATEGORIES,
   type ActeType,
 } from "@/lib/constants";
+import type { SousTypeActe } from "@/lib/types";
 import { cx } from "./ui";
 
 function SubmitButton() {
@@ -21,7 +22,11 @@ function SubmitButton() {
   );
 }
 
-export default function SaleForm() {
+export default function SaleForm({
+  sousTypes = [],
+}: {
+  sousTypes?: SousTypeActe[];
+}) {
   const [state, formAction] = useFormState(createVente, {
     error: null,
     success: false,
@@ -29,6 +34,11 @@ export default function SaleForm() {
   const formRef = useRef<HTMLFormElement>(null);
   const [acteType, setActeType] = useState<ActeType>(ACTE_TYPES[0]);
   const cat = CATEGORIES.find((c) => c.acte === acteType);
+
+  const options = useMemo(
+    () => sousTypes.filter((s) => s.acte_type === acteType),
+    [sousTypes, acteType],
+  );
 
   useEffect(() => {
     if (state.success) {
@@ -59,20 +69,26 @@ export default function SaleForm() {
       <input type="hidden" name="acte_type" value={acteType} />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {cat && cat.sousTypes.length > 0 && (
-          <div>
-            <label className="block text-sm font-medium text-slate-300">
-              Sous-type <span className="text-slate-500">(indicatif)</span>
-            </label>
-            <select name="sous_type" className="field mt-1">
-              {cat.sousTypes.map((s) => (
-                <option key={s} value={s}>
-                  {s}
+        <div>
+          <label className="block text-sm font-medium text-slate-300">
+            Sous-produit
+          </label>
+          {options.length > 0 ? (
+            <select name="sous_type_id" className="field mt-1" defaultValue="">
+              <option value="">— non précisé —</option>
+              {options.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nom}
+                  {s.montant_base > 0 ? ` (${s.montant_base} €)` : ""}
                 </option>
               ))}
             </select>
-          </div>
-        )}
+          ) : (
+            <p className="field mt-1 text-slate-500">
+              Aucun sous-produit configuré
+            </p>
+          )}
+        </div>
         <div>
           <label className="block text-sm font-medium text-slate-300">
             Quantité
@@ -109,6 +125,12 @@ export default function SaleForm() {
           />
           Option Assurance mobile
         </label>
+      )}
+
+      {cat && cat.options.length > 0 && (
+        <p className="text-xs text-slate-500">
+          Autres options {cat.label} : {cat.options.join(", ")}
+        </p>
       )}
 
       {state.error && (

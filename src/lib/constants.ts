@@ -82,6 +82,79 @@ export function categoryForActe(acte: string): CategoryMeta | undefined {
 }
 
 // ------------------------------------------------------------------
+// Objectifs : types d'actes visés (3 ventes + 2 options) et nature de la cible.
+// ------------------------------------------------------------------
+export const OBJECTIF_ACTE_TYPES = [
+  "Freebox",
+  "Forfait mobile",
+  "Téléphone",
+  "Assurance",
+  "McAfee",
+] as const;
+
+export type ObjectifActeType = (typeof OBJECTIF_ACTE_TYPES)[number];
+
+// Types d'actes qui portent une cible de taux d'attachement (numérateur /
+// dénominateur). Les autres n'ont qu'une cible de volume.
+export const ACTE_A_TAUX: Record<ObjectifActeType, string | null> = {
+  Freebox: null,
+  "Forfait mobile": null,
+  Téléphone: null,
+  McAfee: "Freebox", // McAfee attaché aux Freebox vendues
+  Assurance: "Téléphone", // Assurance attachée aux téléphones vendus
+};
+
+export const OBJECTIF_ACTE_FIELD_KEY: Record<ObjectifActeType, string> = {
+  Freebox: "freebox",
+  "Forfait mobile": "forfait_mobile",
+  Téléphone: "telephone",
+  Assurance: "assurance",
+  McAfee: "mcafee",
+};
+
+// ------------------------------------------------------------------
+// Planning : statuts de présence et couleurs.
+// ------------------------------------------------------------------
+export type PlanningStatut =
+  | "present"
+  | "absent"
+  | "conge"
+  | "maladie"
+  | "formation";
+
+export const PLANNING_STATUTS: {
+  key: PlanningStatut;
+  label: string;
+  court: string;
+  cell: string; // classes de la cellule (fond + texte)
+  dot: string; // pastille de légende
+}[] = [
+  { key: "present", label: "Présent", court: "P", cell: "bg-emerald-500/25 text-emerald-200", dot: "bg-emerald-400" },
+  { key: "absent", label: "Absent", court: "A", cell: "bg-rose-500/25 text-rose-200", dot: "bg-rose-400" },
+  { key: "conge", label: "Congé", court: "C", cell: "bg-amber-500/25 text-amber-200", dot: "bg-amber-400" },
+  { key: "maladie", label: "Maladie", court: "M", cell: "bg-fuchsia-500/25 text-fuchsia-200", dot: "bg-fuchsia-400" },
+  { key: "formation", label: "Formation", court: "F", cell: "bg-sky-500/25 text-sky-200", dot: "bg-sky-400" },
+];
+
+export const PLANNING_META: Record<
+  PlanningStatut,
+  (typeof PLANNING_STATUTS)[number]
+> = Object.fromEntries(PLANNING_STATUTS.map((s) => [s.key, s])) as Record<
+  PlanningStatut,
+  (typeof PLANNING_STATUTS)[number]
+>;
+
+/** Ordre de cycle au clic dans la grille admin (dernier = effacer). */
+export const PLANNING_CYCLE: (PlanningStatut | null)[] = [
+  "present",
+  "absent",
+  "conge",
+  "maladie",
+  "formation",
+  null,
+];
+
+// ------------------------------------------------------------------
 // Niveaux (1 → 5) selon le nombre d'actes réalisés dans le mois.
 // ------------------------------------------------------------------
 export interface Niveau {

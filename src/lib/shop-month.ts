@@ -3,17 +3,21 @@ import { currentMonth, monthRange } from "@/lib/format";
 import {
   buildRanking,
   computeBadges,
+  priceBook,
   totalActes,
+  type PriceBook,
   type RankRow,
 } from "@/lib/kpi";
-import type {
-  BadgeKey,
-} from "@/lib/constants";
+import type { BadgeKey } from "@/lib/constants";
 import type {
   Objectif,
+  PalierPrime,
+  Planning,
   PrimeJournaliere,
+  PrimeMensuelle,
   Profile,
   ReglePrime,
+  SousTypeActe,
   Vente,
 } from "@/lib/types";
 
@@ -38,16 +42,28 @@ export function groupByVendeur<T extends { vendeur_id: string }>(
 export interface ShopMonth {
   mois: string;
   range: { start: string; end: string };
+  moisDate: string; // AAAA-MM-01
   sellers: Profile[];
   ventes: Vente[];
   ventesByVendeur: Map<string, Vente[]>;
-  primesByVendeur: Map<string, PrimeJournaliere[]>;
+  primesJourByVendeur: Map<string, PrimeJournaliere[]>;
+  primesMensuelles: PrimeMensuelle[];
+  primeMensuelleByVendeur: Map<string, PrimeMensuelle>;
   regles: ReglePrime[];
+  paliers: PalierPrime[];
+  sousTypes: SousTypeActe[];
+  priceBook: PriceBook;
   objectifs: Objectif[];
+  /** Objectif volume boutique du mois par type d'acte. */
+  objectifsBoutiqueMois: Partial<Record<string, number>>;
+  planning: Planning[];
+  planningByVendeur: Map<string, Planning[]>;
   ranking: RankRow[];
   badges: Map<string, BadgeKey[]>;
   /** true si la table `ventes` d'autres vendeurs est lisible (RLS boutique). */
   ventesCollectivesOk: boolean;
+  /** true si la migration 003 (primes_mensuelles) est en place. */
+  primesMensuellesOk: boolean;
 }
 
 /**
@@ -61,52 +77,96 @@ export async function loadShopMonth(
   const supabase = createClient();
   const range = monthRange(mois);
   const prev = monthRange(prevMonth(mois));
+  const moisDate = `${mois}-01`;
 
-  const [sellersRes, ventesRes, prevVentesRes, primesRes, reglesRes, objectifsRes] =
-    await Promise.all([
-      supabase
-        .from("profiles")
-        .select("*")
-        .eq("shop_id", shopId)
-        .order("nom_complet"),
-      supabase
-        .from("ventes")
-        .select("*")
-        .eq("shop_id", shopId)
-        .gte("created_at", range.start)
-        .lt("created_at", range.end)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("ventes")
-        .select("vendeur_id, quantity, created_at, acte_type")
-        .eq("shop_id", shopId)
-        .gte("created_at", prev.start)
-        .lt("created_at", prev.end),
-      supabase
-        .from("primes_journalieres")
-        .select("*")
-        .gte("date", range.start.slice(0, 10))
-        .lt("date", range.end.slice(0, 10)),
-      supabase.from("regles_primes").select("*").eq("shop_id", shopId),
-      supabase.from("objectifs").select("*").eq("shop_id", shopId),
-    ]);
+  const [
+    sellersRes,
+    ventesRes,
+    prevVentesRes,
+    primesJourRes,
+    primesMoisRes,
+    reglesRes,
+    paliersRes,
+    sousTypesRes,
+    objectifsRes,
+    planningRes,
+  ] = await Promise.all([
+    supabase.from("profiles").select("*").eq("shop_id", shopId).order("nom_complet"),
+    supabase
+      .from("ventes")
+      .select("*")
+      .eq("shop_id", shopId)
+      .gte("created_at", range.start)
+      .lt("created_at", range.end)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("ventes")
+      .select("vendeur_id, quantity, created_at, acte_type")
+      .eq("shop_id", shopId)
+      .gte("created_at", prev.start)
+      .lt("created_at", prev.end),
+    supabase
+      .from("primes_journalieres")
+      .select("*")
+      .gte("date", range.start.slice(0, 10))
+      .lt("date", range.end.slice(0, 10)),
+    supabase.from("primes_mensuelles").select("*").eq("mois", moisDate),
+    supabase.from("regles_primes").select("*").eq("shop_id", shopId),
+    supabase.from("paliers_primes").select("*").eq("shop_id", shopId),
+    supabase.from("sous_types_actes").select("*").eq("shop_id", shopId),
+    supabase.from("objectifs").select("*").eq("shop_id", shopId),
+    supabase
+      .from("planning")
+      .select("*")
+      .gte("date", range.start.slice(0, 10))
+      .lt("date", range.end.slice(0, 10)),
+  ]);
 
   const sellers = ((sellersRes.data ?? []) as Profile[]).filter(
     (p) => p.role === "vendeur",
   );
   const ventes = (ventesRes.data ?? []) as Vente[];
   const prevVentes = (prevVentesRes.data ?? []) as Vente[];
-  const primes = (primesRes.data ?? []) as PrimeJournaliere[];
+  const primesJour = (primesJourRes.data ?? []) as PrimeJournaliere[];
+  const primesMensuelles = (primesMoisRes.data ?? []) as PrimeMensuelle[];
   const regles = (reglesRes.data ?? []) as ReglePrime[];
+  const paliers = (paliersRes.data ?? []) as PalierPrime[];
+  const sousTypes = ((sousTypesRes.data ?? []) as SousTypeActe[]).sort(
+    (a, b) => a.acte_type.localeCompare(b.acte_type) || a.ordre - b.ordre,
+  );
   const objectifs = (objectifsRes.data ?? []) as Objectif[];
+  const planning = (planningRes.data ?? []) as Planning[];
 
   const ventesByVendeur = groupByVendeur(ventes);
-  const primesByVendeur = groupByVendeur(primes);
+  const primesJourByVendeur = groupByVendeur(primesJour);
+  const planningByVendeur = groupByVendeur(planning);
+  const primeMensuelleByVendeur = new Map(
+    primesMensuelles.map((p) => [p.vendeur_id, p]),
+  );
+  const primeByVendeur = new Map(
+    primesMensuelles.map((p) => [p.vendeur_id, Number(p.prime_totale ?? 0)]),
+  );
+
+  const objectifsBoutiqueMois: Partial<Record<string, number>> = {};
+  for (const o of objectifs) {
+    if (
+      o.vendeur_id === null &&
+      o.type_cible === "volume" &&
+      o.periode === "mois" &&
+      o.acte_type &&
+      o.date_debut <= moisDate &&
+      o.date_fin >= range.start.slice(0, 10)
+    ) {
+      objectifsBoutiqueMois[o.acte_type] = Number(
+        o.valeur_cible ?? o.nb_ventes_cible ?? 0,
+      );
+    }
+  }
 
   const ranking = buildRanking(
     sellers,
     ventesByVendeur,
-    primesByVendeur,
+    primeByVendeur,
     range.start,
     range.end,
   );
@@ -117,7 +177,6 @@ export async function loadShopMonth(
   );
   const badges = computeBadges(ranking, actesMoisPrecedent);
 
-  // Un vendeur qui ne voit que ses propres ventes ⇒ RLS boutique absente.
   const distinctVendeurs = new Set(ventes.map((v) => v.vendeur_id));
   const ventesCollectivesOk =
     sellers.length <= 1 || ventes.length === 0 || distinctVendeurs.size > 1;
@@ -125,14 +184,24 @@ export async function loadShopMonth(
   return {
     mois,
     range,
+    moisDate,
     sellers,
     ventes,
     ventesByVendeur,
-    primesByVendeur,
+    primesJourByVendeur,
+    primesMensuelles,
+    primeMensuelleByVendeur,
     regles,
+    paliers,
+    sousTypes,
+    priceBook: priceBook(sousTypes, regles),
     objectifs,
+    objectifsBoutiqueMois,
+    planning,
+    planningByVendeur,
     ranking,
     badges,
     ventesCollectivesOk,
+    primesMensuellesOk: !primesMoisRes.error,
   };
 }

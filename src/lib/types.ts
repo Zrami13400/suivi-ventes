@@ -16,14 +16,28 @@ export interface Profile {
   created_at: string;
 }
 
+// Type d'acte visé par un objectif : les 3 valeurs de vente + les 2 options.
+export type ObjectifActeType =
+  | "Freebox"
+  | "Forfait mobile"
+  | "Téléphone"
+  | "Assurance"
+  | "McAfee";
+export type TypeCible = "volume" | "taux";
+
 export interface Objectif {
   id: string;
   shop_id: string;
-  vendeur_id: string | null;
+  vendeur_id: string | null; // null = objectif boutique
   periode: Periode;
   date_debut: string;
   date_fin: string;
-  nb_ventes_cible: number;
+  // null = objectif global multi-actes (rétro-compat).
+  acte_type: ObjectifActeType | null;
+  type_cible: TypeCible;
+  // Volume : nombre d'actes cible. Taux : pourcentage cible (0-100).
+  valeur_cible: number | null;
+  nb_ventes_cible: number | null;
   created_by: string;
   created_at: string;
 }
@@ -36,10 +50,22 @@ export interface Vente {
   quantity: number;
   has_mcafee: boolean;
   has_assurance: boolean;
+  sous_type_id: string | null;
   created_at: string;
 }
 
-// Une ligne de barème par type d'acte et par boutique.
+// Sous-produit d'un type d'acte, avec son montant de base €.
+export interface SousTypeActe {
+  id: string;
+  shop_id: string;
+  acte_type: string;
+  nom: string;
+  montant_base: number;
+  ordre: number;
+}
+
+// Ligne de barème "flat" par type d'acte et par boutique (bonus options +
+// montant par acte de repli quand aucun sous-type n'est renseigné).
 export interface ReglePrime {
   id: string;
   shop_id: string;
@@ -49,14 +75,55 @@ export interface ReglePrime {
   bonus_assurance: number;
 }
 
+// Paliers de boost par type d'acte.
+export interface PalierPrime {
+  id: string;
+  shop_id: string;
+  acte_type: string;
+  seuil_individuel: number;
+  boost_individuel: number;
+  boost_collectif: number;
+}
+
 export interface PrimeJournaliere {
   id: string;
   vendeur_id: string;
   date: string;
-  // Nombre total d'actes vendus dans la journée (et non plus un montant €).
   total_ventes: number;
   prime_calculee: number;
   updated_at: string;
+}
+
+// Prime du mois ventilée, par vendeur (migration 003). Toujours privée.
+export interface PrimeMensuelle {
+  id: string;
+  vendeur_id: string;
+  shop_id: string;
+  mois: string; // 1er jour du mois, AAAA-MM-01
+  prime_base: number;
+  boost_individuel: number;
+  boost_collectif: number;
+  bonus_mcafee: number;
+  bonus_assurance: number;
+  prime_totale: number;
+  total_actes: number;
+  updated_at: string;
+}
+
+export type PlanningStatut =
+  | "present"
+  | "absent"
+  | "conge"
+  | "maladie"
+  | "formation";
+
+export interface Planning {
+  id: string;
+  vendeur_id: string;
+  shop_id: string;
+  date: string;
+  statut: PlanningStatut;
+  created_at: string;
 }
 
 // Table optionnelle `challenges` (migration 002_challenges.sql). Les pages
@@ -83,12 +150,20 @@ export interface Challenge {
 // the underlying tables; unknown extras are tolerated via the index signature.
 export interface ProgressionObjectif {
   id: string;
+  objectif_id: string;
   shop_id: string;
   vendeur_id: string | null;
   periode: Periode;
   date_debut: string;
   date_fin: string;
-  nb_ventes_cible: number;
+  acte_type: ObjectifActeType | null;
+  type_cible: TypeCible;
+  valeur_cible: number | null;
+  nb_ventes_cible: number | null;
   nb_ventes_realise: number | null;
+  volume_realise: number | null;
+  taux_base: number | null;
+  taux_realise: number | null;
+  jours_travailles: number | null;
   [key: string]: unknown;
 }
