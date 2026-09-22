@@ -11,7 +11,7 @@ export function PrimeTab({ data, monthLabel }: { data: Breakdown; monthLabel: st
       <CommissionBreakdown data={data} title="Ma prime du mois" />
       <p className="text-xs text-slate-500">
         Détail privé : base par acte, boost individuel/collectif, et bonus
-        options (McAfee, Assurance, Coque, Reprise, Garantie).
+        options attachées à tes ventes.
       </p>
     </div>
   );

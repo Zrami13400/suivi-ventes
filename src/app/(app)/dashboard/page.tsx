@@ -5,6 +5,7 @@ import { getCurrentProfileOrNull } from "@/lib/auth";
 import { currentMonth, monthLabel, todayISO } from "@/lib/format";
 import {
   categoryMix,
+  breakdownFromPrimeMensuelle,
   computeCommission,
   niveauPourActes,
   objectifJourVendeur,
@@ -97,23 +98,11 @@ export default async function DashboardPage({
 
   const primeComputed = computeCommission(ownVentesMonth, sm.ventes, {
     priceBook: sm.priceBook,
-    regles: sm.regles,
     paliers: sm.paliers,
     objectifsBoutiqueMois: sm.objectifsBoutiqueMois,
   });
   const primeBreakdown: Breakdown = myPrimeMensuelle
-    ? {
-        base: myPrimeMensuelle.prime_base,
-        boostIndividuel: myPrimeMensuelle.boost_individuel,
-        boostCollectif: myPrimeMensuelle.boost_collectif,
-        bonusMcafee: myPrimeMensuelle.bonus_mcafee,
-        bonusAssurance: myPrimeMensuelle.bonus_assurance,
-        bonusCoque: myPrimeMensuelle.bonus_coque,
-        bonusReprise: myPrimeMensuelle.bonus_reprise,
-        bonusGarantie: myPrimeMensuelle.bonus_garantie,
-        total: myPrimeMensuelle.prime_totale,
-        totalActes: myPrimeMensuelle.total_actes,
-      }
+    ? breakdownFromPrimeMensuelle(myPrimeMensuelle)
     : primeComputed;
 
   const niveauLabel = niveauPourActes(totalActes(ownVentesMonth)).label;
@@ -139,6 +128,7 @@ export default async function DashboardPage({
           vendeurId={profile.id}
           nomComplet={profile.nom_complet}
           avatarUrl={profile.avatar_url}
+          role={profile.role}
           shopId={profile.shop_id}
           today={today}
           moisDate={sm.moisDate}
@@ -146,6 +136,7 @@ export default async function DashboardPage({
           paliers={sm.paliers}
           sousTypes={sm.sousTypes}
           modeles={sm.modeles}
+          options={sm.options}
           objectifs={sm.objectifs}
           objectifsBoutiqueMois={sm.objectifsBoutiqueMois}
           initialSellerVentesMois={ownVentesMonth}
@@ -176,6 +167,7 @@ export default async function DashboardPage({
           paliers: sm.paliers,
           sousTypes: sm.sousTypes,
           modeles: sm.modeles,
+          options: sm.options,
           objectifs: sm.objectifs,
           objectifsBoutiqueMois: sm.objectifsBoutiqueMois,
           initialSellerVentesMois: ownVentesMonth,

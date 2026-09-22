@@ -6,6 +6,13 @@ import { usePathname } from "next/navigation";
 import { cx } from "../ui";
 import { type DashboardTab, useDashboardTab } from "./DashboardTabContext";
 
+// Association onglet → clé de badge (voir DashboardTabBadges). Les autres
+// onglets n'ont pas de badge court pertinent.
+const BADGE_KEY: Partial<Record<DashboardTab, "prime" | "rang">> = {
+  prime: "prime",
+  equipe: "rang",
+};
+
 const ITEMS: { key: DashboardTab; label: string; icon: typeof Home }[] = [
   { key: "accueil", label: "Accueil", icon: Home },
   { key: "stats", label: "Stats", icon: LineChart },
@@ -16,7 +23,7 @@ const ITEMS: { key: DashboardTab; label: string; icon: typeof Home }[] = [
 
 export function BottomNav() {
   const pathname = usePathname();
-  const { tab, setTab } = useDashboardTab();
+  const { tab, setTab, badges } = useDashboardTab();
   const onDashboard = pathname === "/dashboard";
 
   return (
@@ -24,10 +31,19 @@ export function BottomNav() {
       {ITEMS.map((it) => {
         const active = onDashboard && tab === it.key;
         const Icon = it.icon;
+        const badgeKey = BADGE_KEY[it.key];
+        const badgeValue = badgeKey ? badges[badgeKey] : null;
         const content = (
           <>
             <Icon className="h-5 w-5" strokeWidth={1.8} aria-hidden />
-            {it.label}
+            <span className="leading-tight">
+              {it.label}
+              {badgeValue && (
+                <span className="block text-[9px] font-semibold normal-case opacity-80">
+                  {badgeValue}
+                </span>
+              )}
+            </span>
           </>
         );
         const className = cx(

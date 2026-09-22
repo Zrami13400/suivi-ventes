@@ -3,7 +3,7 @@ import type { CommissionBreakdown as Breakdown } from "@/lib/kpi";
 import { cx } from "./ui";
 
 const LINES: {
-  key: keyof Breakdown;
+  key: "base" | "boostIndividuel" | "boostCollectif";
   label: string;
   hint: string;
 }[] = [
@@ -18,12 +18,26 @@ const LINES: {
     label: "Boost collectif",
     hint: "part proratisée si la boutique dépasse son objectif",
   },
-  { key: "bonusMcafee", label: "Bonus McAfee", hint: "attachement Freebox" },
-  { key: "bonusAssurance", label: "Bonus Assurance", hint: "attachement Téléphone" },
-  { key: "bonusCoque", label: "Bonus Coque", hint: "attachement Téléphone" },
-  { key: "bonusReprise", label: "Bonus Reprise", hint: "attachement Téléphone" },
-  { key: "bonusGarantie", label: "Bonus Garantie", hint: "attachement Téléphone" },
 ];
+
+function Line({ label, hint, value }: { label: string; hint: string; value: number }) {
+  return (
+    <li
+      className={cx(
+        "flex items-baseline justify-between gap-3 py-2.5",
+        value === 0 && "opacity-45",
+      )}
+    >
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-white">{label}</p>
+        <p className="truncate text-xs text-slate-500">{hint}</p>
+      </div>
+      <span className="shrink-0 font-semibold tabular-nums text-white">
+        {formatMoney(value)}
+      </span>
+    </li>
+  );
+}
 
 export function CommissionBreakdown({
   data,
@@ -47,26 +61,25 @@ export function CommissionBreakdown({
       </div>
 
       <ul className="mt-4 divide-y divide-line/60">
-        {LINES.map((l) => {
-          const v = Number(data[l.key] ?? 0);
-          return (
-            <li
-              key={l.key}
-              className={cx(
-                "flex items-baseline justify-between gap-3 py-2.5",
-                v === 0 && "opacity-45",
-              )}
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-white">{l.label}</p>
-                <p className="truncate text-xs text-slate-500">{l.hint}</p>
-              </div>
-              <span className="shrink-0 font-semibold tabular-nums text-white">
-                {formatMoney(v)}
-              </span>
-            </li>
-          );
-        })}
+        {LINES.map((l) => (
+          <Line key={l.key} label={l.label} hint={l.hint} value={Number(data[l.key] ?? 0)} />
+        ))}
+        {data.optionsDetail.length > 0 ? (
+          data.optionsDetail.map((o) => (
+            <Line
+              key={o.id}
+              label={`Bonus ${o.nom}`}
+              hint={
+                o.qte > 0
+                  ? `${o.qte} attachement${o.qte > 1 ? "s" : ""} · ${o.acte_type}`
+                  : `attachement ${o.acte_type}`
+              }
+              value={o.montant}
+            />
+          ))
+        ) : (
+          <Line label="Bonus options" hint="aucune option attachée ce mois" value={data.bonusOptions} />
+        )}
       </ul>
     </div>
   );

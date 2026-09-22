@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { Plus } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { CommissionBreakdown as Breakdown, CatKey, RankRow } from "@/lib/kpi";
 import type {
   ModeleTelephone,
+  OptionFlat,
   Objectif,
   PalierPrime,
   PrimeMensuelle,
@@ -31,6 +33,7 @@ interface AccueilProps {
   paliers: PalierPrime[];
   sousTypes: SousTypeActe[];
   modeles: ModeleTelephone[];
+  options: OptionFlat[] | null;
   objectifs: Objectif[];
   objectifsBoutiqueMois: Partial<Record<string, number>>;
   initialSellerVentesMois: Vente[];
@@ -62,6 +65,7 @@ interface Props {
 
 export function MobileDashboardShell({ initialTab, accueil, stats, equipe, prime, plus }: Props) {
   const { tab, setTab } = useDashboardTab();
+  const [fabBump, setFabBump] = useState(0);
 
   useEffect(() => {
     setTab(initialTab);
@@ -73,11 +77,25 @@ export function MobileDashboardShell({ initialTab, accueil, stats, equipe, prime
 
   return (
     <div className="lg:hidden">
-      {tab === "accueil" && <AccueilTab {...accueil} />}
+      {tab === "accueil" && <AccueilTab {...accueil} fabBump={fabBump} />}
       {tab === "stats" && <StatsTab {...stats} />}
       {tab === "equipe" && <EquipeTab {...equipe} />}
       {tab === "prime" && <PrimeTab {...prime} />}
       {tab === "plus" && <PlusTab {...plus} />}
+
+      {/* FAB : partout, ramène sur Accueil et ouvre la saisie rapide —
+          l'action la plus utile de l'app, à un tap. */}
+      <button
+        type="button"
+        onClick={() => {
+          setTab("accueil");
+          setFabBump((n) => n + 1);
+        }}
+        aria-label="Ajouter une vente"
+        className="fixed bottom-24 right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-brand text-white shadow-glow transition active:scale-95"
+      >
+        <Plus className="h-6 w-6" strokeWidth={2.2} aria-hidden />
+      </button>
     </div>
   );
 }

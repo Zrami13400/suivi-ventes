@@ -1,13 +1,16 @@
 "use client";
 
-import { ChevronDown, Settings, Smartphone, Target, Trophy, Wifi } from "lucide-react";
+import { ChevronDown, CheckCircle2, Coins, Settings, Target, Trophy } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AdminQuickAccess } from "../AdminQuickAccess";
 import { firstName, formatLongDate, formatMoney, motivation, pct } from "@/lib/format";
-import { ligneCommission, type CatKey } from "@/lib/kpi";
+import { ligneCommission, mostFrequentActeType, type CatKey } from "@/lib/kpi";
+import { CATEGORIES, type ActeType } from "@/lib/constants";
 import { useLiveDashboard } from "@/lib/useLiveDashboard";
 import type {
   ModeleTelephone,
+  OptionFlat,
   Objectif,
   PalierPrime,
   PrimeMensuelle,
@@ -15,8 +18,11 @@ import type {
   SousTypeActe,
   Vente,
 } from "@/lib/types";
-import SaleForm from "../SaleForm";
-import { Avatar, EmptyState, ProgressBar, cx } from "../ui";
+import { ActeButton } from "../ActeButton";
+import { ActeEntrySheet } from "../ActeEntrySheet";
+import { Avatar, EmptyState, IconStat, ProgressBar, cx } from "../ui";
+import { AnimatedMoney } from "../ui-client";
+import { useDashboardTab } from "./DashboardTabContext";
 
 interface Props {
   vendeurId: string;
@@ -30,6 +36,7 @@ interface Props {
   paliers: PalierPrime[];
   sousTypes: SousTypeActe[];
   modeles: ModeleTelephone[];
+  options: OptionFlat[] | null;
   objectifs: Objectif[];
   objectifsBoutiqueMois: Partial<Record<string, number>>;
   initialSellerVentesMois: Vente[];
@@ -42,6 +49,8 @@ interface Props {
   rang: number | null;
   totalSellers: number;
   teammates: { id: string; nom_complet: string }[];
+  /** Incrémenté par le FAB de MobileDashboardShell pour ouvrir la saisie rapide. */
+  fabBump?: number;
 }
 
 function ordinal(n: number): string {
@@ -49,15 +58,48 @@ function ordinal(n: number): string {
 }
 
 export function AccueilTab(props: Props) {
-  const { nomComplet, avatarUrl, role, rang, totalSellers } = props;
+  const { nomComplet, avatarUrl, role, rang, totalSellers, fabBump } = props;
   const [actesOpen, setActesOpen] = useState(true);
+  const [sheetActe, setSheetActe] = useState<ActeType | null>(null);
 
-  const { toasts, pb, breakdownTotal, ventesToday, ownActesToday, defi, progressForForm } =
-    useLiveDashboard(props);
+  const {
+    toasts,
+    setToasts,
+    pb,
+    sellerVentes,
+    breakdownTotal,
+    ventesToday,
+    ownActesToday,
+    defi,
+    progressForForm,
+  } = useLiveDashboard(props);
+
+  const { setBadges } = useDashboardTab();
 
   const dateStr = formatLongDate();
   const todayMotivation = motivation(props.today);
   const classementLabel = rang ? `${rang}${ordinal(rang)} / ${totalSellers}` : "—";
+
+  useEffect(() => {
+    setBadges({
+      prime: formatMoney(breakdownTotal),
+      rang: rang ? `${rang}${ordinal(rang)}` : null,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [breakdownTotal, rang]);
+
+  const fabBumpRef = useRef(0);
+  useEffect(() => {
+    if (fabBump && fabBump !== fabBumpRef.current) {
+      fabBumpRef.current = fabBump;
+      setSheetActe(mostFrequentActeType(sellerVentes));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fabBump]);
+
+  function pushToast(text: string) {
+    setToasts((p) => [...p, { id: `${Date.now()}-${Math.random()}`, text }]);
+  }
 
   return (
     <div className="space-y-5 pb-4">
@@ -84,44 +126,75 @@ export function AccueilTab(props: Props) {
 
       {/* Greeting */}
       <div>
-        <h1 className="text-2xl font-bold text-white">
+        <h1 className="text-xl font-bold text-white">
           Bonjour {firstName(nomComplet)} ! <span aria-hidden>👋</span>
         </h1>
-        <p className="mt-1 text-sm text-slate-300">{todayMotivation}</p>
+        <p className="mt-0.5 text-sm text-slate-300">{todayMotivation}</p>
       </div>
 
-      {/* 3 KPI cards */}
-      <div className="grid grid-cols-3 gap-2.5">
-        <div className="rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 p-3 text-white">
-          <p className="text-[10px] font-semibold uppercase tracking-wide opacity-90">
-            Actes du jour
-          </p>
-          <p className="mt-1.5 text-xl font-bold tabular-nums">
-            {ownActesToday}
-            <span className="text-xs font-medium opacity-80">
-              {" "}
-              / {props.sellerDailyTarget || "—"}
-            </span>
-          </p>
-        </div>
-        <div className="rounded-xl bg-surface-strong p-3 ring-1 ring-line">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            Prime estimée
-          </p>
-          <p className="mt-1.5 text-xl font-bold tabular-nums text-amber-300">
-            {formatMoney(breakdownTotal)}
-          </p>
-        </div>
-        <div className="rounded-xl bg-surface-strong p-3 ring-1 ring-line">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            Classement
-          </p>
-          <p className="mt-1.5 flex items-center gap-1 text-xl font-bold tabular-nums text-white">
-            <Trophy className="h-4 w-4 text-amber-300" strokeWidth={1.8} aria-hidden />
-            {classementLabel}
-          </p>
-        </div>
+      {/* Hero : prime estimée du jour — le plus gros élément de l'écran */}
+      <div className="text-center">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+          Prime estimée
+        </p>
+        <AnimatedMoney
+          value={breakdownTotal}
+          className="text-[48px] font-black leading-none text-amber-300"
+        />
       </div>
+
+      {/* 3 indicateurs clés */}
+      <div className="grid grid-cols-3 gap-2">
+        <IconStat
+          icon={<CheckCircle2 className="h-4 w-4 text-rose-300" strokeWidth={1.8} aria-hidden />}
+          value={String(ownActesToday)}
+          label="Actes"
+        />
+        <IconStat
+          icon={<Coins className="h-4 w-4 text-amber-300" strokeWidth={1.8} aria-hidden />}
+          value={formatMoney(breakdownTotal)}
+          label="Prime"
+          accent
+        />
+        <IconStat
+          icon={<Trophy className="h-4 w-4 text-amber-300" strokeWidth={1.8} aria-hidden />}
+          value={classementLabel}
+          label="Classement"
+        />
+      </div>
+
+      {/* Enregistrer un acte — 3 gros boutons, 2 taps pour valider une vente classique */}
+      <div className="space-y-2.5">
+        {CATEGORIES.map((c) => {
+          const p = progressForForm[c.acte] ?? { realise: 0, cible: 0 };
+          return (
+            <ActeButton
+              key={c.key}
+              acte={c.acte}
+              label={c.label}
+              realise={p.realise}
+              cible={p.cible}
+              onClick={() => setSheetActe(c.acte)}
+            />
+          );
+        })}
+      </div>
+
+      {sheetActe && (
+        <ActeEntrySheet
+          open
+          onClose={() => setSheetActe(null)}
+          acteType={sheetActe}
+          label={CATEGORIES.find((c) => c.acte === sheetActe)?.label ?? sheetActe}
+          sousTypes={props.sousTypes}
+          modeles={props.modeles}
+          pb={pb}
+          sellerVentesMois={sellerVentes}
+          onSuccess={pushToast}
+        />
+      )}
+
+      {role === "admin" && <AdminQuickAccess />}
 
       {/* Défi du jour */}
       <div className="card p-4">
@@ -157,20 +230,6 @@ export function AccueilTab(props: Props) {
         )}
       </div>
 
-      {/* Enregistrer un acte */}
-      <div>
-        <h2 className="text-base font-semibold text-white">Enregistrer un acte</h2>
-        <p className="text-sm text-slate-400">Choisis une catégorie pour commencer.</p>
-        <div className="mt-3">
-          <SaleForm
-            sousTypes={props.sousTypes}
-            modeles={props.modeles}
-            progress={progressForForm}
-            initialActeType={null}
-          />
-        </div>
-      </div>
-
       {/* Mes actes du jour */}
       <div className="card p-0">
         <button
@@ -198,17 +257,6 @@ export function AccueilTab(props: Props) {
               <ul className="divide-y divide-line/60">
                 {ventesToday.map((v) => (
                   <li key={v.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                    {v.acte_type === "Freebox" ? (
-                      <Wifi className="h-4 w-4 shrink-0 text-violet-300" strokeWidth={1.8} aria-hidden />
-                    ) : v.acte_type === "Téléphone" ? (
-                      <Smartphone
-                        className="h-4 w-4 shrink-0 text-emerald-300"
-                        strokeWidth={1.8}
-                        aria-hidden
-                      />
-                    ) : (
-                      <Target className="h-4 w-4 shrink-0 text-sky-300" strokeWidth={1.8} aria-hidden />
-                    )}
                     <span className="min-w-0 flex-1 truncate text-white">
                       {v.acte_type} × {v.quantity}
                     </span>

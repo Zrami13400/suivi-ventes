@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import {
   ACTE_A_TAUX,
+  ACTE_TYPES,
   OBJECTIF_ACTE_FIELD_KEY,
   OBJECTIF_ACTE_TYPES,
 } from "@/lib/constants";
@@ -226,7 +227,7 @@ export async function setPlanning(
 }
 
 // ============================================================
-// BARÈME DE PRIMES (sous-types + paliers + bonus options)
+// BARÈME DE PRIMES (sous-types + paliers + options flat)
 // ============================================================
 export async function updateBaremePrimes(
   _prev: FormResult,
@@ -275,18 +276,10 @@ export async function updateBaremePrimes(
     return { error: "Valeur de palier invalide.", success: false };
   }
 
-  // 3. Bonus options (flat) sur regles_primes.
-  const bonusMcafee = parseNum(formData.get("bonus_mcafee")) ?? 0;
-  const bonusAssurance = parseNum(formData.get("bonus_assurance")) ?? 0;
-  const bonusCoque = parseNum(formData.get("bonus_coque")) ?? 0;
-  const bonusReprise = parseNum(formData.get("bonus_reprise")) ?? 0;
-  const bonusGarantie = parseNum(formData.get("bonus_garantie")) ?? 0;
-  if (
-    [bonusMcafee, bonusAssurance, bonusCoque, bonusReprise, bonusGarantie].some(
-      (n) => Number.isNaN(n),
-    )
-  ) {
-    return { error: "Bonus option invalide.", success: false };
+  // 3. Options flat (champ caché "options_json", cf. BaremeForm).
+  const parsedOptions = parseOptionsJson(formData.get("options_json"));
+  if (typeof parsedOptions === "string") {
+    return { error: parsedOptions, success: false };
   }
 
   for (const u of sousTypeUpdates) {
@@ -303,23 +296,10 @@ export async function updateBaremePrimes(
     .upsert(paliers, { onConflict: "shop_id,acte_type" });
   if (palErr) return { error: palErr.message, success: false };
 
-  const { error: regErr } = await supabase
-    .from("regles_primes")
-    .upsert(
-      [
-        { shop_id: admin.shop_id, acte_type: "Freebox", bonus_mcafee: bonusMcafee },
-        {
-          shop_id: admin.shop_id,
-          acte_type: "Téléphone",
-          bonus_assurance: bonusAssurance,
-          bonus_coque: bonusCoque,
-          bonus_reprise: bonusReprise,
-          bonus_garantie: bonusGarantie,
-        },
-      ],
-      { onConflict: "shop_id,acte_type" },
-    );
-  if (regErr) return { error: regErr.message, success: false };
+  if (parsedOptions) {
+    const optErr = await saveOptionsFlat(admin.shop_id, parsedOptions);
+    if (optErr) return { error: optErr, success: false };
+  }
 
   const { error: rpcErr } = await supabase.rpc("recalculer_primes_boutique", {
     p_shop_id: admin.shop_id,
@@ -334,6 +314,123 @@ export async function updateBaremePrimes(
     };
   }
   return { error: null, success: true };
+}
+
+type OptionInput = {
+  id: string | null;
+  nom: string;
+  acte_type: string;
+  montant_bonus: number;
+  actif: boolean;
+  ordre: number;
+};
+
+/**
+ * Valide la liste d'options envoyée par le formulaire de barème.
+ * null = champ absent (rien à faire) ; string = message d'erreur.
+ */
+function parseOptionsJson(raw: FormDataEntryValue | null): OptionInput[] | null | string {
+  if (raw == null || raw === "") return null;
+  let data: unknown;
+  try {
+    data = JSON.parse(String(raw));
+  } catch {
+    return "Liste d'options illisible.";
+  }
+  if (!Array.isArray(data)) return "Liste d'options illisible.";
+
+  const out: OptionInput[] = [];
+  const seen = new Set<string>();
+  for (const item of data as Record<string, unknown>[]) {
+    const acte_type = String(item?.acte_type ?? "");
+    const nom = String(item?.nom ?? "").trim();
+    const montant = parseNum(String(item?.montant_bonus ?? ""));
+    const id = typeof item?.id === "string" && item.id ? item.id : null;
+    if (!(ACTE_TYPES as readonly string[]).includes(acte_type)) {
+      return "Type d'acte d'option invalide.";
+    }
+    if (!nom) return `Une option ${acte_type} n'a pas de nom.`;
+    if (montant != null && Number.isNaN(montant)) {
+      return `Montant invalide pour l'option « ${nom} ».`;
+    }
+    const dedupe = `${acte_type}|${nom.toLowerCase()}`;
+    if (seen.has(dedupe)) {
+      return `L'option « ${nom} » existe en double pour ${acte_type}.`;
+    }
+    seen.add(dedupe);
+    out.push({
+      id,
+      nom,
+      acte_type,
+      montant_bonus: montant ?? 0,
+      actif: item?.actif !== false,
+      ordre: Number.isInteger(item?.ordre) ? Number(item.ordre) : out.length,
+    });
+  }
+  return out;
+}
+
+/**
+ * Synchronise options_flat avec la liste éditée : supprime les options
+ * retirées, met à jour les existantes, insère les nouvelles (dans cet ordre,
+ * pour qu'un nom libéré par une suppression soit réutilisable).
+ */
+async function saveOptionsFlat(
+  shopId: string,
+  options: OptionInput[],
+): Promise<string | null> {
+  const supabase = createClient();
+  const { data: existing, error } = await supabase
+    .from("options_flat")
+    .select("id")
+    .eq("shop_id", shopId);
+  if (error) {
+    return "Table options_flat introuvable — exécutez migrations/007_options_flat.sql. " + error.message;
+  }
+
+  const existingIds = new Set((existing ?? []).map((o) => o.id as string));
+  const keptIds = new Set(options.flatMap((o) => (o.id && existingIds.has(o.id) ? [o.id] : [])));
+  const toDelete = Array.from(existingIds).filter((id) => !keptIds.has(id));
+
+  if (toDelete.length > 0) {
+    const { error: delErr } = await supabase
+      .from("options_flat")
+      .delete()
+      .eq("shop_id", shopId)
+      .in("id", toDelete);
+    if (delErr) return delErr.message;
+  }
+
+  for (const o of options) {
+    if (!o.id || !existingIds.has(o.id)) continue;
+    const { error: updErr } = await supabase
+      .from("options_flat")
+      .update({
+        nom: o.nom,
+        montant_bonus: o.montant_bonus,
+        actif: o.actif,
+        ordre: o.ordre,
+      })
+      .eq("id", o.id)
+      .eq("shop_id", shopId);
+    if (updErr) return `Option « ${o.nom} » : ${updErr.message}`;
+  }
+
+  const inserts = options
+    .filter((o) => !o.id || !existingIds.has(o.id))
+    .map((o) => ({
+      shop_id: shopId,
+      nom: o.nom,
+      acte_type: o.acte_type,
+      montant_bonus: o.montant_bonus,
+      actif: o.actif,
+      ordre: o.ordre,
+    }));
+  if (inserts.length > 0) {
+    const { error: insErr } = await supabase.from("options_flat").insert(inserts);
+    if (insErr) return insErr.message;
+  }
+  return null;
 }
 
 export async function addSousType(formData: FormData): Promise<void> {

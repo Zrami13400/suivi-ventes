@@ -1,7 +1,8 @@
 import BaremeForm from "@/components/BaremeForm";
 import { requireAdmin } from "@/lib/auth";
+import { sortOptions } from "@/lib/kpi";
 import { createClient } from "@/lib/supabase/server";
-import type { PalierPrime, ReglePrime, SousTypeActe } from "@/lib/types";
+import type { OptionFlat, PalierPrime, SousTypeActe } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,7 @@ export default async function AdminPrimesPage() {
   const admin = await requireAdmin();
   const supabase = createClient();
 
-  const [sousTypesRes, paliersRes, reglesRes] = await Promise.all([
+  const [sousTypesRes, paliersRes, optionsRes, usageRes] = await Promise.all([
     supabase
       .from("sous_types_actes")
       .select("*")
@@ -17,13 +18,21 @@ export default async function AdminPrimesPage() {
       .order("acte_type")
       .order("ordre"),
     supabase.from("paliers_primes").select("*").eq("shop_id", admin.shop_id),
-    supabase.from("regles_primes").select("*").eq("shop_id", admin.shop_id),
+    supabase.from("options_flat").select("*").eq("shop_id", admin.shop_id),
+    supabase.rpc("options_flat_usage", { p_shop_id: admin.shop_id }),
   ]);
 
-  const error = sousTypesRes.error || paliersRes.error || reglesRes.error;
+  const error = sousTypesRes.error || paliersRes.error;
   const sousTypes = (sousTypesRes.data ?? []) as SousTypeActe[];
   const paliers = (paliersRes.data ?? []) as PalierPrime[];
-  const regles = (reglesRes.data ?? []) as ReglePrime[];
+  // null = migration 007 non exécutée : la liste d'options n'est pas éditable.
+  const options = optionsRes.error
+    ? null
+    : sortOptions((optionsRes.data ?? []) as OptionFlat[]);
+  const usage: Record<string, number> = {};
+  for (const u of (usageRes.data ?? []) as { option_id: string; nb_ventes: number }[]) {
+    usage[u.option_id] = Number(u.nb_ventes ?? 0);
+  }
 
   return (
     <div className="space-y-6">
@@ -47,7 +56,12 @@ export default async function AdminPrimesPage() {
         )}
 
         <div className="mt-4">
-          <BaremeForm sousTypes={sousTypes} paliers={paliers} regles={regles} />
+          <BaremeForm
+            sousTypes={sousTypes}
+            paliers={paliers}
+            options={options}
+            usage={usage}
+          />
         </div>
       </div>
     </div>

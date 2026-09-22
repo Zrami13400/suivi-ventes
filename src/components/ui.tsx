@@ -134,3 +134,40 @@ export function EmptyState({ children }: { children: ReactNode }) {
     <div className="card-soft p-6 text-sm text-slate-400">{children}</div>
   );
 }
+
+/** Icône + très grand chiffre + libellé court, pour les rangées de KPI. */
+export function IconStat({
+  icon,
+  value,
+  label,
+  accent,
+}: {
+  icon: ReactNode;
+  value: string;
+  label: string;
+  accent?: boolean;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-1 text-center">
+      <span
+        className={cx(
+          "grid h-9 w-9 place-items-center rounded-full bg-surface-strong",
+          accent && "bg-amber-500/15",
+        )}
+      >
+        {icon}
+      </span>
+      <span
+        className={cx(
+          "text-[28px] font-black leading-none tabular-nums text-white",
+          accent && "text-amber-300",
+        )}
+      >
+        {value}
+      </span>
+      <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+        {label}
+      </span>
+    </div>
+  );
+}

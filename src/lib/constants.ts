@@ -81,6 +81,18 @@ export function categoryForActe(acte: string): CategoryMeta | undefined {
   return CATEGORIES.find((c) => c.acte === acte);
 }
 
+// Palette dédiée aux grands boutons d'action de l'onglet Accueil (distincte
+// des dégradés de marque `CATEGORIES[].grad` utilisés ailleurs — logo,
+// en-têtes admin, page ventes).
+export const ACTE_ACTION_STYLE: Record<
+  ActeType,
+  { grad: string; ring: string }
+> = {
+  Freebox: { grad: "grad-action-freebox", ring: "ring-rose-400/40" },
+  "Forfait mobile": { grad: "grad-action-forfait", ring: "ring-blue-400/40" },
+  Téléphone: { grad: "grad-action-telephone", ring: "ring-emerald-400/40" },
+};
+
 // ------------------------------------------------------------------
 // Objectifs : types d'actes visés (3 ventes + 2 options) et nature de la cible.
 // ------------------------------------------------------------------

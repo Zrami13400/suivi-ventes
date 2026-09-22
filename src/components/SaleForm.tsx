@@ -4,12 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { createVente } from "@/app/(app)/dashboard/actions";
 import {
-  ACTE_A_MCAFEE,
   ACTE_TYPES,
   CATEGORIES,
   type ActeType,
 } from "@/lib/constants";
-import type { ModeleTelephone, SousTypeActe } from "@/lib/types";
+import type { ModeleTelephone, OptionFlat, SousTypeActe } from "@/lib/types";
 import { cx } from "./ui";
 
 function SubmitButton() {
@@ -56,12 +55,15 @@ function isModeleUtilisable(m: ModeleTelephone): boolean {
 export default function SaleForm({
   sousTypes = [],
   modeles = [],
+  options: flatOptions = [],
   progress,
   initialActeType = ACTE_TYPES[0],
 }: {
   sousTypes?: SousTypeActe[];
   /** Modèles de téléphones configurés par l'admin (migration 006). */
   modeles?: ModeleTelephone[];
+  /** Options flat de la boutique (catalogue admin, migration 007). */
+  options?: OptionFlat[];
   /** Progression du jour par type d'acte (réalisé / cible), pour les cartes. */
   progress?: Partial<Record<ActeType, { realise: number; cible: number }>>;
   /**
@@ -77,12 +79,15 @@ export default function SaleForm({
   });
   const formRef = useRef<HTMLFormElement>(null);
   const [acteType, setActeType] = useState<ActeType | null>(initialActeType);
-  const cat = acteType ? CATEGORIES.find((c) => c.acte === acteType) : undefined;
   const isTelephone = acteType === "Téléphone";
 
   const options = useMemo(
     () => (acteType ? sousTypes.filter((s) => s.acte_type === acteType) : []),
     [sousTypes, acteType],
+  );
+  const acteOptions = useMemo(
+    () => flatOptions.filter((o) => o.actif && o.acte_type === acteType),
+    [flatOptions, acteType],
   );
 
   const modelesUtilisables = useMemo(
@@ -229,58 +234,20 @@ export default function SaleForm({
             </div>
           </div>
 
-          {acteType === ACTE_A_MCAFEE && (
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input
-                name="has_mcafee"
-                type="checkbox"
-                className="h-4 w-4 rounded border-line bg-surface-strong text-brand focus:ring-brand"
-              />
-              Option McAfee
-            </label>
-          )}
-
-          {isTelephone && (
+          {acteOptions.length > 0 && (
             <div className="grid gap-2 sm:grid-cols-2">
-              <label className="flex items-center gap-2 text-sm text-slate-300">
-                <input
-                  name="has_assurance"
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-line bg-surface-strong text-brand focus:ring-brand"
-                />
-                Assurance mobile
-              </label>
-              <label className="flex items-center gap-2 text-sm text-slate-300">
-                <input
-                  name="has_coque"
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-line bg-surface-strong text-brand focus:ring-brand"
-                />
-                Coque
-              </label>
-              <label className="flex items-center gap-2 text-sm text-slate-300">
-                <input
-                  name="has_reprise"
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-line bg-surface-strong text-brand focus:ring-brand"
-                />
-                Reprise
-              </label>
-              <label className="flex items-center gap-2 text-sm text-slate-300">
-                <input
-                  name="has_garantie"
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-line bg-surface-strong text-brand focus:ring-brand"
-                />
-                Garantie
-              </label>
+              {acteOptions.map((o) => (
+                <label key={o.id} className="flex items-center gap-2 text-sm text-slate-300">
+                  <input
+                    name="option_ids"
+                    value={o.id}
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-line bg-surface-strong text-brand focus:ring-brand"
+                  />
+                  {o.nom}
+                </label>
+              ))}
             </div>
-          )}
-
-          {cat && cat.options.length > 0 && !isTelephone && (
-            <p className="text-xs text-slate-500">
-              Autres options {cat.label} : {cat.options.join(", ")}
-            </p>
           )}
 
           {state.error && (

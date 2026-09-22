@@ -11,6 +11,7 @@ import {
 import type { BadgeKey } from "@/lib/constants";
 import type {
   ModeleTelephone,
+  OptionFlat,
   Objectif,
   PalierPrime,
   Planning,
@@ -54,6 +55,8 @@ export interface ShopMonth {
   paliers: PalierPrime[];
   sousTypes: SousTypeActe[];
   modeles: ModeleTelephone[];
+  /** Options flat (null si la migration 007 n'est pas exécutée). */
+  options: OptionFlat[] | null;
   priceBook: PriceBook;
   objectifs: Objectif[];
   /** Objectif volume boutique du mois par type d'acte. */
@@ -93,6 +96,7 @@ export async function loadShopMonth(
     paliersRes,
     sousTypesRes,
     modelesRes,
+    optionsRes,
     objectifsRes,
     planningRes,
   ] = await Promise.all([
@@ -120,6 +124,7 @@ export async function loadShopMonth(
     supabase.from("paliers_primes").select("*").eq("shop_id", shopId),
     supabase.from("sous_types_actes").select("*").eq("shop_id", shopId),
     supabase.from("modeles_telephones").select("*").eq("shop_id", shopId),
+    supabase.from("options_flat").select("*").eq("shop_id", shopId),
     supabase.from("objectifs").select("*").eq("shop_id", shopId),
     supabase
       .from("planning")
@@ -143,6 +148,7 @@ export async function loadShopMonth(
   const modeles = ((modelesRes.data ?? []) as ModeleTelephone[]).sort(
     (a, b) => a.marque.localeCompare(b.marque) || a.nom.localeCompare(b.nom),
   );
+  const options = optionsRes.error ? null : ((optionsRes.data ?? []) as OptionFlat[]);
   const objectifs = (objectifsRes.data ?? []) as Objectif[];
   const planning = (planningRes.data ?? []) as Planning[];
 
@@ -204,7 +210,8 @@ export async function loadShopMonth(
     paliers,
     sousTypes,
     modeles,
-    priceBook: priceBook(sousTypes, regles, modeles),
+    options,
+    priceBook: priceBook(sousTypes, regles, modeles, options),
     objectifs,
     objectifsBoutiqueMois,
     planning,

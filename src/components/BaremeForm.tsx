@@ -1,6 +1,7 @@
 "use client";
 
-import { useTransition } from "react";
+import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import {
   addSousType,
@@ -8,7 +9,8 @@ import {
   updateBaremePrimes,
 } from "@/app/(app)/admin/actions";
 import { CATEGORIES } from "@/lib/constants";
-import type { PalierPrime, ReglePrime, SousTypeActe } from "@/lib/types";
+import type { OptionFlat, PalierPrime, SousTypeActe } from "@/lib/types";
+import { cx } from "./ui";
 
 const ACTE_KEY: Record<string, string> = {
   Freebox: "freebox",
@@ -28,11 +30,15 @@ function SubmitButton() {
 export default function BaremeForm({
   sousTypes,
   paliers,
-  regles,
+  options,
+  usage,
 }: {
   sousTypes: SousTypeActe[];
   paliers: PalierPrime[];
-  regles: ReglePrime[];
+  /** null = table options_flat absente (migration 007 non exécutée). */
+  options: OptionFlat[] | null;
+  /** Nombre de ventes (toutes périodes) où chaque option est cochée. */
+  usage: Record<string, number>;
 }) {
   const [state, formAction] = useFormState(updateBaremePrimes, {
     error: null,
@@ -41,12 +47,6 @@ export default function BaremeForm({
   const [, startTransition] = useTransition();
 
   const paliersByActe = new Map(paliers.map((p) => [p.acte_type, p]));
-  const reglePhone = regles.find((r) => r.acte_type === "Téléphone");
-  const mcafee = regles.find((r) => r.acte_type === "Freebox")?.bonus_mcafee ?? 0;
-  const assurance = reglePhone?.bonus_assurance ?? 0;
-  const coque = reglePhone?.bonus_coque ?? 0;
-  const reprise = reglePhone?.bonus_reprise ?? 0;
-  const garantie = reglePhone?.bonus_garantie ?? 0;
 
   function handleDelete(id: string) {
     const fd = new FormData();
@@ -157,83 +157,12 @@ export default function BaremeForm({
           );
         })}
 
-        <div className="card-soft p-4">
-          <p className="text-sm font-semibold uppercase tracking-wide text-white">
-            Bonus options (flat)
-          </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="block text-xs font-medium uppercase tracking-wide text-slate-400">
-                Bonus McAfee (€ / attachement, Freebox)
-              </label>
-              <input
-                name="bonus_mcafee"
-                type="number"
-                step="0.01"
-                min="0"
-                defaultValue={mcafee}
-                className="field mt-1"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium uppercase tracking-wide text-slate-400">
-                Bonus Assurance (€ / attachement, Téléphone)
-              </label>
-              <input
-                name="bonus_assurance"
-                type="number"
-                step="0.01"
-                min="0"
-                defaultValue={assurance}
-                className="field mt-1"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium uppercase tracking-wide text-slate-400">
-                Bonus Coque (€ / attachement, Téléphone)
-              </label>
-              <input
-                name="bonus_coque"
-                type="number"
-                step="0.01"
-                min="0"
-                defaultValue={coque}
-                className="field mt-1"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium uppercase tracking-wide text-slate-400">
-                Bonus Reprise (€ / attachement, Téléphone)
-              </label>
-              <input
-                name="bonus_reprise"
-                type="number"
-                step="0.01"
-                min="0"
-                defaultValue={reprise}
-                className="field mt-1"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium uppercase tracking-wide text-slate-400">
-                Bonus Garantie (€ / attachement, Téléphone)
-              </label>
-              <input
-                name="bonus_garantie"
-                type="number"
-                step="0.01"
-                min="0"
-                defaultValue={garantie}
-                className="field mt-1"
-              />
-            </div>
-          </div>
-        </div>
+        <OptionsEditor options={options} usage={usage} />
 
         <p className="text-xs text-slate-500">
           Prime du mois d&apos;un vendeur = Σ(montant de base) + boost individuel
           (au-delà du seuil, par type d&apos;acte) + boost collectif (si la
-          boutique dépasse son objectif mensuel) + bonus McAfee/Assurance.
+          boutique dépasse son objectif mensuel) + bonus des options attachées.
         </p>
 
         {state.error && (
@@ -283,5 +212,250 @@ function AddSousTypeForm() {
         Ajouter
       </button>
     </form>
+  );
+}
+
+// ------------------------------------------------------------------
+// Options flat : liste éditable (nom, montant, actif, ordre) groupée par
+// type d'acte. Les modifications partent avec "Enregistrer le barème" via
+// le champ caché options_json (cf. updateBaremePrimes).
+// ------------------------------------------------------------------
+interface OptionRow {
+  /** Clé React stable (id en base, ou clé temporaire pour une nouvelle ligne). */
+  key: string;
+  id: string | null;
+  nom: string;
+  acte_type: string;
+  montant: string;
+  actif: boolean;
+}
+
+function toRows(options: OptionFlat[]): OptionRow[] {
+  return options.map((o) => ({
+    key: o.id,
+    id: o.id,
+    nom: o.nom,
+    acte_type: o.acte_type,
+    montant: String(o.montant_bonus ?? 0),
+    actif: o.actif,
+  }));
+}
+
+let tmpSeq = 0;
+
+function OptionsEditor({
+  options,
+  usage,
+}: {
+  options: OptionFlat[] | null;
+  usage: Record<string, number>;
+}) {
+  const [rows, setRows] = useState<OptionRow[]>(() => toRows(options ?? []));
+
+  // Resynchronise après enregistrement : la page serveur est revalidée et
+  // renvoie les ids des options nouvellement créées.
+  useEffect(() => {
+    setRows(toRows(options ?? []));
+  }, [options]);
+
+  const payload = useMemo(() => {
+    const ordreParActe = new Map<string, number>();
+    return JSON.stringify(
+      rows.map((r) => {
+        const ordre = ordreParActe.get(r.acte_type) ?? 0;
+        ordreParActe.set(r.acte_type, ordre + 1);
+        return {
+          id: r.id,
+          nom: r.nom,
+          acte_type: r.acte_type,
+          montant_bonus: r.montant,
+          actif: r.actif,
+          ordre,
+        };
+      }),
+    );
+  }, [rows]);
+
+  if (options === null) {
+    return (
+      <div className="card-soft p-4">
+        <p className="text-sm font-semibold uppercase tracking-wide text-white">
+          Bonus options (flat)
+        </p>
+        <p className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+          Table <code>options_flat</code> introuvable — exécutez
+          migrations/007_options_flat.sql pour rendre les options éditables.
+        </p>
+      </div>
+    );
+  }
+
+  function patch(key: string, p: Partial<OptionRow>) {
+    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...p } : r)));
+  }
+
+  function move(key: string, dir: -1 | 1) {
+    setRows((prev) => {
+      const row = prev.find((r) => r.key === key);
+      if (!row) return prev;
+      const group = prev.filter((r) => r.acte_type === row.acte_type);
+      const i = group.indexOf(row);
+      const j = i + dir;
+      if (j < 0 || j >= group.length) return prev;
+      [group[i], group[j]] = [group[j], group[i]];
+      return [...prev.filter((r) => r.acte_type !== row.acte_type), ...group];
+    });
+  }
+
+  function add(acte_type: string) {
+    tmpSeq += 1;
+    setRows((prev) => [
+      ...prev,
+      { key: `new-${tmpSeq}`, id: null, nom: "", acte_type, montant: "0", actif: true },
+    ]);
+  }
+
+  function remove(row: OptionRow) {
+    const nb = row.id ? usage[row.id] ?? 0 : 0;
+    if (
+      nb > 0 &&
+      !window.confirm(
+        `« ${row.nom} » est cochée sur ${nb} vente${nb > 1 ? "s" : ""}. ` +
+          "La supprimer retirera son bonus de ces ventes, y compris des " +
+          "commissions passées, au prochain recalcul.\n\n" +
+          "Pour simplement ne plus la proposer aux vendeurs, désactivez-la " +
+          "plutôt.\n\nSupprimer quand même ?",
+      )
+    ) {
+      return;
+    }
+    setRows((prev) => prev.filter((r) => r.key !== row.key));
+  }
+
+  return (
+    <div className="card-soft p-4">
+      <input type="hidden" name="options_json" value={payload} />
+      <p className="text-sm font-semibold uppercase tracking-wide text-white">
+        Bonus options (flat)
+      </p>
+      <p className="mt-1 text-xs text-slate-500">
+        € par attachement. Une option désactivée n&apos;est plus proposée à la
+        saisie mais garde son bonus sur les ventes passées. Les changements
+        sont appliqués à l&apos;enregistrement du barème.
+      </p>
+
+      <div className="mt-4 space-y-5">
+        {CATEGORIES.map((c) => {
+          const group = rows.filter((r) => r.acte_type === c.acte);
+          return (
+            <div key={c.key}>
+              <p className={cx("text-xs font-semibold uppercase tracking-wide", c.accent)}>
+                {c.label}
+              </p>
+              <ul className="mt-2 space-y-2">
+                {group.length === 0 && (
+                  <li className="text-sm text-slate-500">Aucune option.</li>
+                )}
+                {group.map((r, i) => {
+                  const nb = r.id ? usage[r.id] ?? 0 : 0;
+                  return (
+                    <li
+                      key={r.key}
+                      className={cx(
+                        "flex flex-wrap items-center gap-2 rounded-xl border border-line/60 p-2",
+                        !r.actif && "opacity-60",
+                      )}
+                    >
+                      <div className="flex flex-col">
+                        <button
+                          type="button"
+                          onClick={() => move(r.key, -1)}
+                          disabled={i === 0}
+                          aria-label={`Monter ${r.nom}`}
+                          className="text-slate-400 hover:text-white disabled:opacity-30"
+                        >
+                          <ChevronUp className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => move(r.key, 1)}
+                          disabled={i === group.length - 1}
+                          aria-label={`Descendre ${r.nom}`}
+                          className="text-slate-400 hover:text-white disabled:opacity-30"
+                        >
+                          <ChevronDown className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <input
+                        value={r.nom}
+                        onChange={(e) => patch(r.key, { nom: e.target.value })}
+                        placeholder="Nom de l'option"
+                        aria-label="Nom de l'option"
+                        required
+                        className="field min-w-0 flex-1 basis-40"
+                      />
+                      <div className="flex items-center gap-1">
+                        <input
+                          value={r.montant}
+                          onChange={(e) => patch(r.key, { montant: e.target.value })}
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          aria-label={`Bonus € pour ${r.nom || "l'option"}`}
+                          className="field w-24"
+                        />
+                        <span className="text-sm text-slate-400">€</span>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={r.actif}
+                        onClick={() => patch(r.key, { actif: !r.actif })}
+                        className="flex items-center gap-2 text-xs text-slate-300"
+                      >
+                        <span
+                          className={cx(
+                            "relative inline-flex h-5 w-9 shrink-0 rounded-full transition",
+                            r.actif ? "bg-emerald-500" : "bg-slate-600",
+                          )}
+                        >
+                          <span
+                            className={cx(
+                              "absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all",
+                              r.actif ? "left-[18px]" : "left-0.5",
+                            )}
+                          />
+                        </span>
+                        {r.actif ? "Active" : "Inactive"}
+                      </button>
+                      {nb > 0 && (
+                        <span className="text-xs text-slate-500">
+                          {nb} vente{nb > 1 ? "s" : ""}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => remove(r)}
+                        aria-label={`Supprimer ${r.nom}`}
+                        className="ml-auto text-rose-400 hover:text-rose-300"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <button
+                type="button"
+                onClick={() => add(c.acte)}
+                className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-sky-300 hover:text-white"
+              >
+                <Plus className="h-3.5 w-3.5" /> Ajouter une option
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

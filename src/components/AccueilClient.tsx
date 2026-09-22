@@ -1,11 +1,14 @@
 "use client";
 
+import { CheckCircle2, Coins, Plus, Trophy } from "lucide-react";
 import { useState } from "react";
 import { firstName, formatLongDate, formatMoney, motivation, pct } from "@/lib/format";
-import { ligneCommission, type CatKey } from "@/lib/kpi";
+import { ligneCommission, mostFrequentActeType, type CatKey } from "@/lib/kpi";
+import { CATEGORIES, type ActeType } from "@/lib/constants";
 import { useLiveDashboard } from "@/lib/useLiveDashboard";
 import type {
   ModeleTelephone,
+  OptionFlat,
   Objectif,
   PalierPrime,
   PrimeMensuelle,
@@ -13,13 +16,17 @@ import type {
   SousTypeActe,
   Vente,
 } from "@/lib/types";
-import SaleForm from "./SaleForm";
-import { Avatar, Card, EmptyState, ProgressBar, SectionTitle, cx } from "./ui";
+import { ActeButton } from "./ActeButton";
+import { ActeEntrySheet } from "./ActeEntrySheet";
+import { AdminQuickAccess } from "./AdminQuickAccess";
+import { Avatar, Card, EmptyState, IconStat, ProgressBar, SectionTitle, cx } from "./ui";
+import { AnimatedMoney } from "./ui-client";
 
 interface Props {
   vendeurId: string;
   nomComplet: string;
   avatarUrl: string | null;
+  role: string;
   shopId: string;
   today: string;
   moisDate: string;
@@ -27,6 +34,7 @@ interface Props {
   paliers: PalierPrime[];
   sousTypes: SousTypeActe[];
   modeles: ModeleTelephone[];
+  options: OptionFlat[] | null;
   /** Objectifs visibles par ce vendeur (boutique + les siens, au minimum). */
   objectifs: Objectif[];
   objectifsBoutiqueMois: Partial<Record<string, number>>;
@@ -51,6 +59,7 @@ export default function AccueilClient({
   vendeurId,
   nomComplet,
   avatarUrl,
+  role,
   shopId,
   today,
   moisDate,
@@ -58,6 +67,7 @@ export default function AccueilClient({
   paliers,
   sousTypes,
   modeles,
+  options,
   objectifs,
   objectifsBoutiqueMois,
   initialSellerVentesMois,
@@ -73,10 +83,13 @@ export default function AccueilClient({
   teammates,
 }: Props) {
   const [actesOpen, setActesOpen] = useState(false);
+  const [sheetActe, setSheetActe] = useState<ActeType | null>(null);
   const {
     live,
     toasts,
+    setToasts,
     pb,
+    sellerVentes,
     breakdownTotal,
     ventesToday,
     ownActesToday,
@@ -91,6 +104,7 @@ export default function AccueilClient({
     paliers,
     sousTypes,
     modeles,
+    options,
     objectifs,
     objectifsBoutiqueMois,
     initialSellerVentesMois,
@@ -107,10 +121,14 @@ export default function AccueilClient({
   const todayMotivation = motivation(today);
   const classementLabel = rang ? `${rang}${ordinal(rang)} / ${totalSellers}` : "—";
 
+  function pushToast(text: string) {
+    setToasts((p) => [...p, { id: `${Date.now()}-${Math.random()}`, text }]);
+  }
+
   return (
     <div className="space-y-6">
-      {/* Notifications temps réel (achievements de l'équipe) */}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2 sm:bottom-6 sm:right-6">
+      {/* Toasts (achievements équipe + confirmations de vente) */}
+      <div className="pointer-events-none fixed inset-x-0 top-4 z-50 flex flex-col items-center gap-2">
         {toasts.map((t) => (
           <div
             key={t.id}
@@ -121,7 +139,17 @@ export default function AccueilClient({
         ))}
       </div>
 
-      {/* Identité + motivation + défi du jour */}
+      {/* FAB (desktop, pas de barre d'onglets) */}
+      <button
+        type="button"
+        onClick={() => setSheetActe(mostFrequentActeType(sellerVentes))}
+        aria-label="Ajouter une vente"
+        className="fixed bottom-6 right-6 z-40 grid h-14 w-14 place-items-center rounded-full bg-brand text-white shadow-glow transition hover:bg-brand-soft active:scale-95"
+      >
+        <Plus className="h-6 w-6" strokeWidth={2.2} aria-hidden />
+      </button>
+
+      {/* Identité + hero prime + défi du jour */}
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
         <div className="card p-6">
           <div className="flex items-center justify-between">
@@ -143,11 +171,11 @@ export default function AccueilClient({
             <Avatar
               name={nomComplet}
               avatarUrl={avatarUrl}
-              size={72}
+              size={64}
               className="ring-2 ring-white/10"
             />
             <div className="min-w-0">
-              <h1 className="text-2xl font-bold text-white sm:text-3xl">
+              <h1 className="text-2xl font-bold text-white">
                 Bonjour {firstName(nomComplet)} ! <span aria-hidden>👋</span>
               </h1>
               <p className="mt-1 text-sm text-slate-300">{todayMotivation}</p>
@@ -161,14 +189,34 @@ export default function AccueilClient({
             </div>
           </div>
 
+          {/* Hero : prime estimée du jour */}
+          <div className="mt-6 text-center">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+              Prime estimée aujourd&apos;hui
+            </p>
+            <AnimatedMoney
+              value={breakdownTotal}
+              className="text-[56px] font-black leading-none text-amber-300"
+            />
+          </div>
+
           <div className="mt-5 grid grid-cols-3 gap-3">
-            <QuickStat label="Actes aujourd'hui" value={String(ownActesToday)} />
-            <QuickStat
-              label="Prime estimée"
+            <IconStat
+              icon={<CheckCircle2 className="h-4 w-4 text-rose-300" strokeWidth={1.8} aria-hidden />}
+              value={String(ownActesToday)}
+              label="Actes"
+            />
+            <IconStat
+              icon={<Coins className="h-4 w-4 text-amber-300" strokeWidth={1.8} aria-hidden />}
               value={formatMoney(breakdownTotal)}
+              label="Prime"
               accent
             />
-            <QuickStat label="Classement" value={classementLabel} />
+            <IconStat
+              icon={<Trophy className="h-4 w-4 text-amber-300" strokeWidth={1.8} aria-hidden />}
+              value={classementLabel}
+              label="Classement"
+            />
           </div>
         </div>
 
@@ -209,18 +257,41 @@ export default function AccueilClient({
         </Card>
       </div>
 
-      {/* Enregistrer un acte */}
+      {role === "admin" && <AdminQuickAccess />}
+
+      {/* Enregistrer un acte — 3 gros boutons */}
       <Card>
         <SectionTitle>Enregistrer un acte</SectionTitle>
-        <div className="mt-4">
-          <SaleForm
-            sousTypes={sousTypes}
-            modeles={modeles}
-            progress={progressForForm}
-            initialActeType={null}
-          />
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {CATEGORIES.map((c) => {
+            const p = progressForForm[c.acte] ?? { realise: 0, cible: 0 };
+            return (
+              <ActeButton
+                key={c.key}
+                acte={c.acte}
+                label={c.label}
+                realise={p.realise}
+                cible={p.cible}
+                onClick={() => setSheetActe(c.acte)}
+              />
+            );
+          })}
         </div>
       </Card>
+
+      {sheetActe && (
+        <ActeEntrySheet
+          open
+          onClose={() => setSheetActe(null)}
+          acteType={sheetActe}
+          label={CATEGORIES.find((c) => c.acte === sheetActe)?.label ?? sheetActe}
+          sousTypes={sousTypes}
+          modeles={modeles}
+          pb={pb}
+          sellerVentesMois={sellerVentes}
+          onSuccess={pushToast}
+        />
+      )}
 
       {/* Mes actes du jour (repliable) */}
       <Card className="p-0">
@@ -293,32 +364,6 @@ export default function AccueilClient({
           </div>
         )}
       </Card>
-    </div>
-  );
-}
-
-function QuickStat({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent?: boolean;
-}) {
-  return (
-    <div className="rounded-lg border border-line bg-surface-strong p-3 text-center">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-        {label}
-      </p>
-      <p
-        className={cx(
-          "mt-1 text-lg font-bold tabular-nums text-white sm:text-xl",
-          accent && "text-amber-300",
-        )}
-      >
-        {value}
-      </p>
     </div>
   );
 }

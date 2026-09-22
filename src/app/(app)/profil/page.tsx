@@ -9,6 +9,7 @@ import {
 } from "@/lib/format";
 import {
   actesParCategorie,
+  breakdownFromPrimeMensuelle,
   computeCommission,
   niveauPourActes,
   prochainNiveau,
@@ -57,23 +58,11 @@ export default async function ProfilPage() {
   const primeMensuelle = sm.primeMensuelleByVendeur.get(profile.id) ?? null;
   const computed = computeCommission(mine, sm.ventes, {
     priceBook: sm.priceBook,
-    regles: sm.regles,
     paliers: sm.paliers,
     objectifsBoutiqueMois: sm.objectifsBoutiqueMois,
   });
   const breakdown: Breakdown = primeMensuelle
-    ? {
-        base: primeMensuelle.prime_base,
-        boostIndividuel: primeMensuelle.boost_individuel,
-        boostCollectif: primeMensuelle.boost_collectif,
-        bonusMcafee: primeMensuelle.bonus_mcafee,
-        bonusAssurance: primeMensuelle.bonus_assurance,
-        bonusCoque: primeMensuelle.bonus_coque,
-        bonusReprise: primeMensuelle.bonus_reprise,
-        bonusGarantie: primeMensuelle.bonus_garantie,
-        total: primeMensuelle.prime_totale,
-        totalActes: primeMensuelle.total_actes,
-      }
+    ? breakdownFromPrimeMensuelle(primeMensuelle)
     : computed;
 
   const joursTravaillesMois = joursTravailles(

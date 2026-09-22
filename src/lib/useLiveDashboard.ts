@@ -5,17 +5,18 @@ import { createClient } from "@/lib/supabase/client";
 import { firstName } from "@/lib/format";
 import {
   actesParCategorie,
+  bonusOptionLegacy,
   computeCommission,
   objectifJourParCategorie,
   objectifVolumeJour,
   priceBook,
-  reglesByActe,
   totalActes,
   type CatKey,
 } from "@/lib/kpi";
 import { CATEGORIES, type ActeType } from "@/lib/constants";
 import type {
   ModeleTelephone,
+  OptionFlat,
   Objectif,
   PalierPrime,
   PrimeMensuelle,
@@ -33,6 +34,8 @@ export interface LiveDashboardProps {
   paliers: PalierPrime[];
   sousTypes: SousTypeActe[];
   modeles: ModeleTelephone[];
+  /** Options flat (null = migration 007 absente, repli sur regles_primes). */
+  options: OptionFlat[] | null;
   objectifs: Objectif[];
   objectifsBoutiqueMois: Partial<Record<string, number>>;
   initialSellerVentesMois: Vente[];
@@ -67,6 +70,7 @@ export function useLiveDashboard(props: LiveDashboardProps) {
     paliers,
     sousTypes,
     modeles,
+    options,
     objectifs,
     objectifsBoutiqueMois,
     initialSellerVentesMois,
@@ -180,18 +184,19 @@ export function useLiveDashboard(props: LiveDashboardProps) {
     return () => clearTimeout(t);
   }, [toasts]);
 
-  const pb = useMemo(() => priceBook(sousTypes, regles, modeles), [sousTypes, regles, modeles]);
-  const reglesMap = useMemo(() => reglesByActe(regles), [regles]);
+  const pb = useMemo(
+    () => priceBook(sousTypes, regles, modeles, options),
+    [sousTypes, regles, modeles, options],
+  );
 
   const computed = useMemo(
     () =>
       computeCommission(sellerVentes, shopVentes, {
         priceBook: pb,
-        regles,
         paliers,
         objectifsBoutiqueMois,
       }),
-    [sellerVentes, shopVentes, pb, regles, paliers, objectifsBoutiqueMois],
+    [sellerVentes, shopVentes, pb, paliers, objectifsBoutiqueMois],
   );
 
   const breakdownTotal =
@@ -227,7 +232,7 @@ export function useLiveDashboard(props: LiveDashboardProps) {
 
     const candidates: DefiCandidate[] = [];
     if (dailyTargetMcafee > 0) {
-      const bonusUnit = reglesMap.get("Freebox")?.bonus_mcafee ?? 0;
+      const bonusUnit = bonusOptionLegacy(pb, "mcafee");
       const remaining = Math.max(0, dailyTargetMcafee - mcafeeRealise);
       candidates.push({
         label: "McAfee",
@@ -237,7 +242,7 @@ export function useLiveDashboard(props: LiveDashboardProps) {
       });
     }
     if (dailyTargetAssurance > 0) {
-      const bonusUnit = reglesMap.get("Téléphone")?.bonus_assurance ?? 0;
+      const bonusUnit = bonusOptionLegacy(pb, "assurance");
       const remaining = Math.max(0, dailyTargetAssurance - assuranceRealise);
       candidates.push({
         label: "Assurance",
@@ -263,7 +268,7 @@ export function useLiveDashboard(props: LiveDashboardProps) {
       .sort((a, b) => b.cible - b.realise - (a.cible - a.realise));
 
     return { pick: open[0] ?? null, allDone: candidates.length > 0 && open.length === 0 };
-  }, [ventesToday, dailyTargetMcafee, dailyTargetAssurance, objCat, parCatToday, reglesMap]);
+  }, [ventesToday, dailyTargetMcafee, dailyTargetAssurance, objCat, parCatToday, pb]);
 
   return {
     sellerVentes,

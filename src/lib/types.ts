@@ -54,6 +54,8 @@ export interface Vente {
   has_coque: boolean;
   has_reprise: boolean;
   has_garantie: boolean;
+  /** Ids des options_flat cochées (migration 007). Absent avant migration. */
+  options?: string[] | null;
   sous_type_id: string | null;
   modele_id: string | null;
   created_at: string;
@@ -85,8 +87,34 @@ export interface ModeleTelephone {
   updated_at: string;
 }
 
-// Ligne de barème "flat" par type d'acte et par boutique (bonus options +
-// montant par acte de repli quand aucun sous-type n'est renseigné).
+// Option "flat" configurable par l'admin (migration 007) : bonus € par
+// attachement sur un type d'acte. `legacy_key` relie les 5 options
+// historiques à leur booléen ventes.has_<legacy_key>.
+export type OptionLegacyKey = "mcafee" | "assurance" | "coque" | "reprise" | "garantie";
+
+export interface OptionFlat {
+  id: string;
+  shop_id: string;
+  nom: string;
+  acte_type: string;
+  montant_bonus: number;
+  actif: boolean;
+  ordre: number;
+  legacy_key: OptionLegacyKey | null;
+  created_at: string;
+}
+
+export interface OptionBonusDetail {
+  id: string;
+  nom: string;
+  acte_type: string;
+  qte: number;
+  montant: number;
+}
+
+// Ligne de barème "flat" par type d'acte et par boutique (montant par acte de
+// repli quand aucun sous-type n'est renseigné). Les colonnes bonus_* ne sont
+// plus lues depuis la migration 007 (remplacées par options_flat).
 export interface ReglePrime {
   id: string;
   shop_id: string;
@@ -132,6 +160,9 @@ export interface PrimeMensuelle {
   bonus_coque: number;
   bonus_reprise: number;
   bonus_garantie: number;
+  /** Total des bonus options + ventilation (migration 007). */
+  bonus_options?: number | null;
+  bonus_options_detail?: OptionBonusDetail[] | null;
   prime_totale: number;
   total_actes: number;
   updated_at: string;

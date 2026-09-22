@@ -14,6 +14,7 @@ import {
   ligneCommission,
   objectifJourParCategorie,
   objectifJourVendeur,
+  optionsCochees,
   totalActes,
 } from "@/lib/kpi";
 import { CATEGORIES, type ActeType } from "@/lib/constants";
@@ -21,6 +22,14 @@ import { joursTravailles } from "@/lib/planning";
 import { loadShopMonth } from "@/lib/shop-month";
 
 export const dynamic = "force-dynamic";
+
+const OPTION_CHIP = [
+  "bg-violet-500/15 text-violet-200",
+  "bg-emerald-500/15 text-emerald-200",
+  "bg-sky-500/15 text-sky-200",
+  "bg-amber-500/15 text-amber-200",
+  "bg-fuchsia-500/15 text-fuchsia-200",
+];
 
 export default async function VentesPage() {
   const profile = await getCurrentProfileOrNull();
@@ -60,7 +69,12 @@ export default async function VentesPage() {
     <div className="space-y-6">
       <Card>
         <SectionTitle>Enregistrer un acte</SectionTitle>
-        <SaleForm sousTypes={sm.sousTypes} modeles={sm.modeles} progress={progress} />
+        <SaleForm
+          sousTypes={sm.sousTypes}
+          modeles={sm.modeles}
+          options={pb.options}
+          progress={progress}
+        />
       </Card>
 
       <div>
@@ -144,38 +158,20 @@ export default async function VentesPage() {
                       </td>
                       <td className="px-4 py-2.5">
                         <div className="flex flex-wrap gap-1">
-                          {v.has_mcafee && (
-                            <span className="chip bg-violet-500/15 text-violet-200">
-                              McAfee
+                          {optionsCochees(v, pb).map((o) => (
+                            <span
+                              key={o.id}
+                              className={cx(
+                                "chip",
+                                OPTION_CHIP[pb.options.indexOf(o) % OPTION_CHIP.length],
+                              )}
+                            >
+                              {o.nom}
                             </span>
+                          ))}
+                          {optionsCochees(v, pb).length === 0 && (
+                            <span className="text-slate-600">—</span>
                           )}
-                          {v.has_assurance && (
-                            <span className="chip bg-emerald-500/15 text-emerald-200">
-                              Assurance
-                            </span>
-                          )}
-                          {v.has_coque && (
-                            <span className="chip bg-sky-500/15 text-sky-200">
-                              Coque
-                            </span>
-                          )}
-                          {v.has_reprise && (
-                            <span className="chip bg-amber-500/15 text-amber-200">
-                              Reprise
-                            </span>
-                          )}
-                          {v.has_garantie && (
-                            <span className="chip bg-fuchsia-500/15 text-fuchsia-200">
-                              Garantie
-                            </span>
-                          )}
-                          {!v.has_mcafee &&
-                            !v.has_assurance &&
-                            !v.has_coque &&
-                            !v.has_reprise &&
-                            !v.has_garantie && (
-                              <span className="text-slate-600">—</span>
-                            )}
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-amber-300">

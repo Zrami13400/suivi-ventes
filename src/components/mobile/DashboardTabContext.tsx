@@ -5,16 +5,33 @@ import { DASHBOARD_TABS, isDashboardTab, type DashboardTab } from "@/lib/dashboa
 
 export { DASHBOARD_TABS, isDashboardTab, type DashboardTab };
 
+/** Badges courts affichés sous les onglets du bas (ex. "29 €", "3ème"). */
+export interface DashboardTabBadges {
+  prime: string | null;
+  rang: string | null;
+}
+
 interface Ctx {
   tab: DashboardTab;
   setTab: (t: DashboardTab) => void;
+  badges: DashboardTabBadges;
+  setBadges: (b: Partial<DashboardTabBadges>) => void;
 }
 
 const DashboardTabCtx = createContext<Ctx | null>(null);
 
 export function DashboardTabProvider({ children }: { children: ReactNode }) {
   const [tab, setTab] = useState<DashboardTab>("accueil");
-  const value = useMemo(() => ({ tab, setTab }), [tab]);
+  const [badges, setBadgesState] = useState<DashboardTabBadges>({
+    prime: null,
+    rang: null,
+  });
+  const setBadges = (b: Partial<DashboardTabBadges>) =>
+    setBadgesState((prev) => ({ ...prev, ...b }));
+  const value = useMemo(
+    () => ({ tab, setTab, badges, setBadges }),
+    [tab, badges],
+  );
   return <DashboardTabCtx.Provider value={value}>{children}</DashboardTabCtx.Provider>;
 }
 

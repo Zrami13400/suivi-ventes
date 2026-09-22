@@ -1,26 +1,42 @@
 // ------------------------------------------------------------------
 // Calculs KPI dérivés des tables existantes (ventes, regles_primes,
 // primes_journalieres, objectifs). Aucune donnée nouvelle : tout est
-// recalculé à partir de `acte_type + quantity + has_mcafee + has_assurance`,
-// exactement comme le trigger SQL `recalculer_prime()`.
+// recalculé à partir de `acte_type + quantity + options (+ has_* historiques)`,
+// exactement comme les fonctions SQL `recalculer_prime_jour/_mois()`.
 // ------------------------------------------------------------------
 import {
+  ACTE_TYPES,
   BADGES,
   CATEGORIES,
   categoryForActe,
+  isActeType,
   niveauPourActes,
   prochainNiveau,
+  type ActeType,
   type BadgeKey,
   type CategoryMeta,
 } from "./constants";
 import type {
   ModeleTelephone,
+  OptionBonusDetail,
+  OptionFlat,
+  OptionLegacyKey,
   PalierPrime,
+  PrimeMensuelle,
   Profile,
   ReglePrime,
   SousTypeActe,
   Vente,
 } from "./types";
+
+/** Un modèle est proposable s'il est actif et, si borné, pas encore expiré. */
+export function isModeleUtilisable(m: ModeleTelephone): boolean {
+  if (!m.actif) return false;
+  if (m.mois_validite == null) return true;
+  const expiry =
+    new Date(m.updated_at).getTime() + m.mois_validite * 30 * 24 * 60 * 60 * 1000;
+  return Date.now() < expiry;
+}
 
 export type CatKey = CategoryMeta["key"];
 
@@ -36,25 +52,108 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 // ------------------------------------------------------------------
 // Barème : montant de base d'une ligne de vente.
-// Priorité au sous-type vendu, repli sur regles_primes.montant_par_acte.
-// Miroir de `coalesce(st.montant_base, rp.montant_par_acte, 0)` du trigger.
+// Priorité au modèle / sous-type vendu, repli sur regles_primes.montant_par_acte.
+// Miroir de `coalesce(mt.montant_base, st.montant_base, rp.montant_par_acte, 0)`.
 // ------------------------------------------------------------------
 export interface PriceBook {
   sousTypes: Map<string, SousTypeActe>;
   modeles: Map<string, ModeleTelephone>;
   regles: Map<string, ReglePrime>;
+  /** Options flat de la boutique (actives ou non), triées par ordre. */
+  options: OptionFlat[];
 }
 
+const LEGACY_OPTIONS: {
+  key: OptionLegacyKey;
+  nom: string;
+  acte: ActeType;
+  col: keyof ReglePrime;
+}[] = [
+  { key: "mcafee", nom: "McAfee", acte: "Freebox", col: "bonus_mcafee" },
+  { key: "assurance", nom: "Assurance mobile", acte: "Téléphone", col: "bonus_assurance" },
+  { key: "coque", nom: "Coque", acte: "Téléphone", col: "bonus_coque" },
+  { key: "reprise", nom: "Reprise", acte: "Téléphone", col: "bonus_reprise" },
+  { key: "garantie", nom: "Garantie", acte: "Téléphone", col: "bonus_garantie" },
+];
+
+/**
+ * Repli tant que la migration 007 (table options_flat) n'est pas exécutée :
+ * reconstitue les 5 options historiques depuis les colonnes regles_primes.
+ */
+function legacyOptions(regles: ReglePrime[]): OptionFlat[] {
+  return LEGACY_OPTIONS.map((o, i) => {
+    const r = regles.find((x) => x.acte_type === o.acte);
+    return {
+      id: `legacy-${o.key}`,
+      shop_id: r?.shop_id ?? "",
+      nom: o.nom,
+      acte_type: o.acte,
+      montant_bonus: Number(r?.[o.col] ?? 0),
+      actif: true,
+      ordre: i,
+      legacy_key: o.key,
+      created_at: "",
+    };
+  });
+}
+
+/**
+ * `options` à null = table options_flat absente (migration 007 non
+ * exécutée) : repli sur les bonus figés de regles_primes.
+ */
 export function priceBook(
   sousTypes: SousTypeActe[],
   regles: ReglePrime[],
   modeles: ModeleTelephone[] = [],
+  options: OptionFlat[] | null = null,
 ): PriceBook {
   return {
     sousTypes: new Map(sousTypes.map((s) => [s.id, s])),
     modeles: new Map(modeles.map((m) => [m.id, m])),
     regles: new Map(regles.map((r) => [r.acte_type, r])),
+    options: sortOptions(options ?? legacyOptions(regles)),
   };
+}
+
+export function sortOptions(options: OptionFlat[]): OptionFlat[] {
+  return [...options].sort(
+    (a, b) =>
+      a.acte_type.localeCompare(b.acte_type) ||
+      a.ordre - b.ordre ||
+      a.nom.localeCompare(b.nom),
+  );
+}
+
+/** Options proposables à la saisie pour un type d'acte. */
+export function optionsActives(pb: PriceBook, acte: string): OptionFlat[] {
+  return pb.options.filter((o) => o.actif && o.acte_type === acte);
+}
+
+/** Bonus unitaire de l'option historique `key` (0 si supprimée). */
+export function bonusOptionLegacy(pb: PriceBook, key: OptionLegacyKey): number {
+  return Number(pb.options.find((o) => o.legacy_key === key)?.montant_bonus ?? 0);
+}
+
+const LEGACY_FLAG: Record<OptionLegacyKey, keyof Vente> = {
+  mcafee: "has_mcafee",
+  assurance: "has_assurance",
+  coque: "has_coque",
+  reprise: "has_reprise",
+  garantie: "has_garantie",
+};
+
+/**
+ * Options cochées sur une vente — miroir de la fonction SQL option_cochee() :
+ * id présent dans ventes.options, ou booléen has_<legacy_key> vrai.
+ */
+export function optionsCochees(v: Vente, pb: PriceBook): OptionFlat[] {
+  const ids = new Set(Array.isArray(v.options) ? v.options : []);
+  return pb.options.filter(
+    (o) =>
+      o.acte_type === v.acte_type &&
+      (ids.has(o.id) ||
+        (o.legacy_key != null && v[LEGACY_FLAG[o.legacy_key]] === true)),
+  );
 }
 
 export function reglesByActe(regles: ReglePrime[]): Map<string, ReglePrime> {
@@ -73,48 +172,39 @@ export function venteBase(v: Vente, pb: PriceBook): number {
   return v.quantity * base;
 }
 
+/** Bonus options € d'une ligne de vente. */
+export function venteBonusOptions(v: Vente, pb: PriceBook): number {
+  return optionsCochees(v, pb).reduce(
+    (s, o) => s + v.quantity * Number(o.montant_bonus ?? 0),
+    0,
+  );
+}
+
 /** Prime "flat" d'une ligne : base + bonus options (sans les boosts mensuels). */
 export function ligneCommission(v: Vente, pb: PriceBook): number {
-  const r = pb.regles.get(v.acte_type);
-  const mca = v.has_mcafee ? v.quantity * (r?.bonus_mcafee ?? 0) : 0;
-  const ass = v.has_assurance ? v.quantity * (r?.bonus_assurance ?? 0) : 0;
-  const coq = v.has_coque ? v.quantity * (r?.bonus_coque ?? 0) : 0;
-  const rep = v.has_reprise ? v.quantity * (r?.bonus_reprise ?? 0) : 0;
-  const gar = v.has_garantie ? v.quantity * (r?.bonus_garantie ?? 0) : 0;
-  return venteBase(v, pb) + mca + ass + coq + rep + gar;
+  return venteBase(v, pb) + venteBonusOptions(v, pb);
 }
 
 export interface PrimeParts {
   box: number;
   forfaits: number;
   telephones: number;
-  mcafee: number;
   total: number;
 }
 
 /**
- * Ventile la prime "flat" d'un ensemble de ventes par catégorie. McAfee est
- * isolé ; l'assurance est rattachée aux téléphones.
+ * Ventile la prime "flat" d'un ensemble de ventes par catégorie, bonus
+ * options compris (rattachés au type d'acte de la vente).
  */
 export function primeParts(ventes: Vente[], pb: PriceBook): PrimeParts {
-  const p: PrimeParts = { box: 0, forfaits: 0, telephones: 0, mcafee: 0, total: 0 };
+  const p: PrimeParts = { box: 0, forfaits: 0, telephones: 0, total: 0 };
   for (const v of ventes) {
-    const r = pb.regles.get(v.acte_type);
-    const base = venteBase(v, pb);
-    if (v.acte_type === "Freebox") {
-      p.box += base;
-      if (v.has_mcafee) p.mcafee += v.quantity * (r?.bonus_mcafee ?? 0);
-    } else if (v.acte_type === "Forfait mobile") {
-      p.forfaits += base;
-    } else if (v.acte_type === "Téléphone") {
-      p.telephones += base;
-      if (v.has_assurance) p.telephones += v.quantity * (r?.bonus_assurance ?? 0);
-      if (v.has_coque) p.telephones += v.quantity * (r?.bonus_coque ?? 0);
-      if (v.has_reprise) p.telephones += v.quantity * (r?.bonus_reprise ?? 0);
-      if (v.has_garantie) p.telephones += v.quantity * (r?.bonus_garantie ?? 0);
-    }
+    const m = ligneCommission(v, pb);
+    if (v.acte_type === "Freebox") p.box += m;
+    else if (v.acte_type === "Forfait mobile") p.forfaits += m;
+    else if (v.acte_type === "Téléphone") p.telephones += m;
   }
-  p.total = p.box + p.forfaits + p.telephones + p.mcafee;
+  p.total = p.box + p.forfaits + p.telephones;
   return p;
 }
 
@@ -131,18 +221,16 @@ export interface CommissionBreakdown {
   base: number;
   boostIndividuel: number;
   boostCollectif: number;
-  bonusMcafee: number;
-  bonusAssurance: number;
-  bonusCoque: number;
-  bonusReprise: number;
-  bonusGarantie: number;
+  /** Total des bonus options. */
+  bonusOptions: number;
+  /** Ventilation par option cochée au moins une fois. */
+  optionsDetail: OptionBonusDetail[];
   total: number;
   totalActes: number;
 }
 
 export interface CommissionConfig {
   priceBook: PriceBook;
-  regles: ReglePrime[];
   paliers: PalierPrime[];
   /** Objectif volume boutique du mois par type d'acte. */
   objectifsBoutiqueMois: Partial<Record<string, number>>;
@@ -155,16 +243,28 @@ export function computeCommission(
 ): CommissionBreakdown {
   const pb = cfg.priceBook;
   const paliersByActe = new Map(cfg.paliers.map((p) => [p.acte_type, p]));
-  const reglesMap = new Map(cfg.regles.map((r) => [r.acte_type, r]));
 
   const qtyBy = (ventes: Vente[], acte: string) =>
     ventes.reduce((s, v) => (v.acte_type === acte ? s + v.quantity : s), 0);
 
   let base = 0;
   let totalActes = 0;
+  const detail = new Map<string, OptionBonusDetail>();
   for (const v of sellerVentesMois) {
     base += venteBase(v, pb);
     totalActes += v.quantity;
+    for (const o of optionsCochees(v, pb)) {
+      const d = detail.get(o.id) ?? {
+        id: o.id,
+        nom: o.nom,
+        acte_type: o.acte_type,
+        qte: 0,
+        montant: 0,
+      };
+      d.qte += v.quantity;
+      d.montant += v.quantity * Number(o.montant_bonus ?? 0);
+      detail.set(o.id, d);
+    }
   }
 
   let boostIndividuel = 0;
@@ -184,55 +284,109 @@ export function computeCommission(
     }
   }
 
-  const rF = reglesMap.get("Freebox");
-  const rT = reglesMap.get("Téléphone");
-  const mcafeeQte = sellerVentesMois.reduce(
-    (s, v) => (v.acte_type === "Freebox" && v.has_mcafee ? s + v.quantity : s),
-    0,
-  );
-  const assuranceQte = sellerVentesMois.reduce(
-    (s, v) => (v.acte_type === "Téléphone" && v.has_assurance ? s + v.quantity : s),
-    0,
-  );
-  const coqueQte = sellerVentesMois.reduce(
-    (s, v) => (v.acte_type === "Téléphone" && v.has_coque ? s + v.quantity : s),
-    0,
-  );
-  const repriseQte = sellerVentesMois.reduce(
-    (s, v) => (v.acte_type === "Téléphone" && v.has_reprise ? s + v.quantity : s),
-    0,
-  );
-  const garantieQte = sellerVentesMois.reduce(
-    (s, v) => (v.acte_type === "Téléphone" && v.has_garantie ? s + v.quantity : s),
-    0,
-  );
-  const bonusMcafee = mcafeeQte * (rF?.bonus_mcafee ?? 0);
-  const bonusAssurance = assuranceQte * (rT?.bonus_assurance ?? 0);
-  const bonusCoque = coqueQte * (rT?.bonus_coque ?? 0);
-  const bonusReprise = repriseQte * (rT?.bonus_reprise ?? 0);
-  const bonusGarantie = garantieQte * (rT?.bonus_garantie ?? 0);
+  // Même ordre que pb.options (type d'acte, puis ordre admin).
+  const rank = new Map(pb.options.map((o, i) => [o.id, i]));
+  const optionsDetail = Array.from(detail.values())
+    .sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0))
+    .map((d) => ({ ...d, montant: round2(d.montant) }));
+  const bonusOptions = optionsDetail.reduce((s, d) => s + d.montant, 0);
 
   return {
     base: round2(base),
     boostIndividuel: round2(boostIndividuel),
     boostCollectif: round2(boostCollectif),
-    bonusMcafee: round2(bonusMcafee),
-    bonusAssurance: round2(bonusAssurance),
-    bonusCoque: round2(bonusCoque),
-    bonusReprise: round2(bonusReprise),
-    bonusGarantie: round2(bonusGarantie),
-    total: round2(
-      base +
-        boostIndividuel +
-        boostCollectif +
-        bonusMcafee +
-        bonusAssurance +
-        bonusCoque +
-        bonusReprise +
-        bonusGarantie,
-    ),
+    bonusOptions: round2(bonusOptions),
+    optionsDetail,
+    total: round2(base + boostIndividuel + boostCollectif + bonusOptions),
     totalActes,
   };
+}
+
+/**
+ * Ventilation stockée (primes_mensuelles) → CommissionBreakdown. Avant la
+ * migration 007, reconstitue le détail depuis les colonnes bonus_* figées.
+ */
+export function breakdownFromPrimeMensuelle(pm: PrimeMensuelle): CommissionBreakdown {
+  let optionsDetail: OptionBonusDetail[];
+  if (Array.isArray(pm.bonus_options_detail)) {
+    optionsDetail = pm.bonus_options_detail.map((d) => ({
+      ...d,
+      qte: Number(d.qte ?? 0),
+      montant: Number(d.montant ?? 0),
+    }));
+  } else {
+    optionsDetail = LEGACY_OPTIONS.map((o) => ({
+      id: `legacy-${o.key}`,
+      nom: o.nom,
+      acte_type: o.acte as string,
+      qte: 0,
+      montant: Number(pm[`bonus_${o.key}` as keyof PrimeMensuelle] ?? 0),
+    })).filter((d) => d.montant !== 0);
+  }
+  const bonusOptions =
+    pm.bonus_options != null
+      ? Number(pm.bonus_options)
+      : round2(optionsDetail.reduce((s, d) => s + d.montant, 0));
+  return {
+    base: Number(pm.prime_base ?? 0),
+    boostIndividuel: Number(pm.boost_individuel ?? 0),
+    boostCollectif: Number(pm.boost_collectif ?? 0),
+    bonusOptions,
+    optionsDetail,
+    total: Number(pm.prime_totale ?? 0),
+    totalActes: Number(pm.total_actes ?? 0),
+  };
+}
+
+// ------------------------------------------------------------------
+// Présélections pour la saisie rapide (bottom sheet Accueil) : sous-produit
+// et type d'acte les plus vendus par ce vendeur, pour confirmer une vente
+// classique en deux taps.
+// ------------------------------------------------------------------
+
+/** Sous-produit (ou modèle Téléphone) le plus vendu par ce vendeur pour un type d'acte donné. */
+export function mostFrequentSubProduct(
+  ventes: Vente[],
+  acteType: ActeType,
+): { sousTypeId: string | null; modeleId: string | null } {
+  const isTelephone = acteType === "Téléphone";
+  const counts = new Map<string, number>();
+  for (const v of ventes) {
+    if (v.acte_type !== acteType) continue;
+    const key = isTelephone ? v.modele_id : v.sous_type_id;
+    if (!key) continue;
+    counts.set(key, (counts.get(key) ?? 0) + v.quantity);
+  }
+  let bestKey: string | null = null;
+  let bestCount = 0;
+  counts.forEach((c, k) => {
+    if (c > bestCount) {
+      bestKey = k;
+      bestCount = c;
+    }
+  });
+  return isTelephone
+    ? { sousTypeId: null, modeleId: bestKey }
+    : { sousTypeId: bestKey, modeleId: null };
+}
+
+/** Type d'acte le plus vendu par ce vendeur (repli sur "Freebox" si aucune vente). */
+export function mostFrequentActeType(ventes: Vente[]): ActeType {
+  const counts = new Map<ActeType, number>();
+  for (const v of ventes) {
+    if (!isActeType(v.acte_type)) continue;
+    counts.set(v.acte_type, (counts.get(v.acte_type) ?? 0) + v.quantity);
+  }
+  let best: ActeType = ACTE_TYPES[0];
+  let bestCount = -1;
+  for (const acte of ACTE_TYPES) {
+    const c = counts.get(acte) ?? 0;
+    if (c > bestCount) {
+      best = acte;
+      bestCount = c;
+    }
+  }
+  return best;
 }
 
 export function actesParCategorie(ventes: Vente[]): Record<CatKey, number> {
