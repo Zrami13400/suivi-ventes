@@ -127,8 +127,8 @@ doit jamais être préfixée `NEXT_PUBLIC_` ni exposée au navigateur.
 | --- | --- |
 | `/login` | Connexion FreeKpi |
 | `/dashboard` (Accueil) | **Desktop** : bandeau « Bonjour … », cartes KPI, défi du jour, saisie d'acte, actes du jour. **Mobile (< lg)** : application une-page avec barre de navigation basse à 5 onglets (Accueil / Stats / Équipe / Prime / Plus), voir « Shell mobile » ci-dessous |
-| `/objectifs` | Par type d'acte : objectif individuel s'il existe, sinon repli boutique — barres volume et taux d'attachement |
-| `/ventes` | Saisie d'un acte (avec sous-produit), objectifs du jour par catégorie, liste des actes du jour avec prime de base par ligne |
+| `/objectifs` | Par type d'acte : barres volume (mois / semaine / jour, individuel ou repli boutique) + sous-barres McAfee et Assurance mobile (taux d'attachement du mois vs cible, volume si défini) — temps réel |
+| `/ventes` | Journal détaillé des ventes (consultation seule) : filtres période + type d'acte, totaux actes / commission, tableau desktop / cartes mobile — temps réel |
 | `/planning` | Planning du mois du vendeur (lecture seule) + répartition des statuts |
 | `/classement` | Classement d'équipe par actes + statut (🔥 ↑ → ↓), sélecteur de mois, couronne du top vendeur |
 | `/challenges` | Challenges En cours / À venir / Terminés, palmarès |

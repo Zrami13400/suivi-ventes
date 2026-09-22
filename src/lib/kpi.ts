@@ -402,6 +402,26 @@ export function totalActes(ventes: Vente[]): number {
   return ventes.reduce((s, v) => s + v.quantity, 0);
 }
 
+/**
+ * Taux d'attachement d'une option (McAfee vs Freebox, Assurance vs
+ * Téléphone) — même règle que la vue progression_objectifs.
+ */
+export function tauxAttachement(
+  ventes: Vente[],
+  option: "McAfee" | "Assurance",
+): { attaches: number; base: number; taux: number } {
+  const parent = option === "McAfee" ? "Freebox" : "Téléphone";
+  const flag: keyof Vente = option === "McAfee" ? "has_mcafee" : "has_assurance";
+  let attaches = 0;
+  let base = 0;
+  for (const v of ventes) {
+    if (v.acte_type !== parent) continue;
+    base += v.quantity;
+    if (v[flag] === true) attaches += v.quantity;
+  }
+  return { attaches, base, taux: base > 0 ? Math.round((attaches / base) * 100) : 0 };
+}
+
 /** Répartition (fractions sommant à 1) des actes par catégorie. */
 export function categoryMix(ventes: Vente[]): Record<CatKey, number> {
   const acc = actesParCategorie(ventes);

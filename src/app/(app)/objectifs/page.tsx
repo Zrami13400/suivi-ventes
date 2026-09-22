@@ -1,17 +1,34 @@
-import { Card, EmptyState, ProgressBar, SectionTitle } from "@/components/ui";
+import { ActeIcon } from "@/components/ActeIcon";
+import { LiveRefresh } from "@/components/LiveRefresh";
+import { Card, ProgressBar, SectionTitle, cx } from "@/components/ui";
 import { getCurrentProfileOrNull } from "@/lib/auth";
-import { currentMonth, monthLabel, pct, todayISO } from "@/lib/format";
-import { OBJECTIF_ACTE_TYPES, ACTE_A_TAUX } from "@/lib/constants";
+import { currentMonth, monthLabel, monthRange, pct, todayISO } from "@/lib/format";
+import { tauxAttachement } from "@/lib/kpi";
+import { CATEGORIES, type ActeType } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/server";
-import type { ProgressionObjectif } from "@/lib/types";
+import type { ProgressionObjectif, Vente } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 const PERIODE_LABEL: Record<string, string> = {
-  jour: "jour",
-  semaine: "semaine",
-  mois: "mois",
+  jour: "Jour",
+  semaine: "Semaine",
+  mois: "Mois",
 };
+const PERIODES = ["mois", "semaine", "jour"] as const;
+
+type OptionKey = "McAfee" | "Assurance";
+/** Options suivies en sous-objectif, rattachées à leur type d'acte parent. */
+const OPTIONS_PAR_ACTE: Partial<Record<ActeType, { key: OptionKey; label: string }>> = {
+  Freebox: { key: "McAfee", label: "McAfee" },
+  Téléphone: { key: "Assurance", label: "Assurance mobile" },
+};
+
+type Source = "perso" | "boutique";
+interface Choix {
+  row: ProgressionObjectif;
+  source: Source;
+}
 
 export default async function ObjectifsPage() {
   const profile = await getCurrentProfileOrNull();
@@ -19,118 +36,136 @@ export default async function ObjectifsPage() {
 
   const today = todayISO();
   const mois = currentMonth();
+  const range = monthRange(mois);
   const supabase = createClient();
 
-  const { data, error } = await supabase
-    .from("progression_objectifs")
-    .select("*")
-    .eq("shop_id", profile.shop_id)
-    .lte("date_debut", today)
-    .gte("date_fin", today)
-    .or(`vendeur_id.eq.${profile.id},vendeur_id.is.null`);
+  const [progRes, ventesRes] = await Promise.all([
+    supabase
+      .from("progression_objectifs")
+      .select("*")
+      .eq("shop_id", profile.shop_id)
+      .lte("date_debut", today)
+      .gte("date_fin", today)
+      .or(`vendeur_id.eq.${profile.id},vendeur_id.is.null`),
+    supabase
+      .from("ventes")
+      .select("*")
+      .eq("vendeur_id", profile.id)
+      .gte("created_at", range.start)
+      .lt("created_at", range.end),
+  ]);
 
-  const rows = (data ?? []) as ProgressionObjectif[];
+  const rows = (progRes.data ?? []) as ProgressionObjectif[];
+  const ventesMois = (ventesRes.data ?? []) as Vente[];
   const profileId = profile.id;
 
-  // Pour chaque (acte_type, type_cible, periode) : objectif individuel s'il
-  // existe, sinon objectif boutique.
-  function pick(
-    acte: string,
-    typeCible: string,
-    periode: string,
-  ): { row: ProgressionObjectif; source: "perso" | "boutique" } | null {
+  // Objectif individuel s'il existe, sinon objectif boutique.
+  function pick(acte: string, typeCible: string, periode: string): Choix | null {
     const matches = rows.filter(
-      (r) =>
-        r.acte_type === acte &&
-        r.type_cible === typeCible &&
-        r.periode === periode,
+      (r) => r.acte_type === acte && r.type_cible === typeCible && r.periode === periode,
     );
     const perso = matches.find((r) => r.vendeur_id === profileId);
     if (perso) return { row: perso, source: "perso" };
     const boutique = matches.find((r) => r.vendeur_id === null);
-    if (boutique) return { row: boutique, source: "boutique" };
-    return null;
+    return boutique ? { row: boutique, source: "boutique" } : null;
   }
+  /** Première période disponible, du mois au jour. */
+  const pickAny = (acte: string, typeCible: string) =>
+    PERIODES.map((p) => pick(acte, typeCible, p)).find(Boolean) ?? null;
 
-  const periodes = ["mois", "semaine", "jour"];
-  const cards = OBJECTIF_ACTE_TYPES.flatMap((acte) => {
-    const out: {
-      acte: string;
-      periode: string;
-      volume: ReturnType<typeof pick>;
-      taux: ReturnType<typeof pick>;
-    }[] = [];
-    for (const p of periodes) {
-      const volume = pick(acte, "volume", p);
-      const taux = ACTE_A_TAUX[acte] ? pick(acte, "taux", p) : null;
-      if (volume || taux) out.push({ acte, periode: p, volume, taux });
-    }
-    return out;
-  });
+  const realiseMois = (acte: ActeType) =>
+    ventesMois.reduce((s, v) => (v.acte_type === acte ? s + v.quantity : s), 0);
 
   return (
     <div className="space-y-5">
+      <LiveRefresh vendeurId={profile.id} shopId={profile.shop_id} />
       <SectionTitle>Mes objectifs — {monthLabel(mois)}</SectionTitle>
 
-      {error && (
+      {progRes.error && (
         <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-          Vue <code>progression_objectifs</code> indisponible ({error.message}).
+          Vue <code>progression_objectifs</code> indisponible ({progRes.error.message}).
           Exécutez la migration <code>003_objectifs_planning_paliers.sql</code>.
         </p>
       )}
 
-      {cards.length === 0 ? (
-        <EmptyState>
-          Aucun objectif actif. L&apos;administrateur peut en définir dans
-          l&apos;espace d&apos;administration.
-        </EmptyState>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {cards.map(({ acte, periode, volume, taux }) => (
-            <Card key={`${acte}-${periode}`}>
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-white">{acte}</h3>
-                <span className="chip bg-surface-strong text-slate-400">
-                  {PERIODE_LABEL[periode] ?? periode}
+      <div className="grid gap-4 lg:grid-cols-3">
+        {CATEGORIES.map((c) => {
+          const volumes = PERIODES.map((p) => ({ periode: p, obj: pick(c.acte, "volume", p) })).filter(
+            (x): x is { periode: (typeof PERIODES)[number]; obj: Choix } => x.obj != null,
+          );
+          const option = OPTIONS_PAR_ACTE[c.acte];
+          return (
+            <Card key={c.key} className="overflow-hidden">
+              <div className={cx("-m-5 mb-4 flex items-center gap-2 p-4 text-white", c.grad)}>
+                <ActeIcon acte={c.acte} />
+                <h3 className="font-semibold uppercase tracking-wide">{c.label}</h3>
+                <span className="ml-auto text-sm opacity-90">
+                  {realiseMois(c.acte)} ce mois
                 </span>
               </div>
 
-              {volume && (
-                <Bloc
-                  titre="Volume"
-                  source={volume.source}
-                  realise={Number(volume.row.volume_realise ?? 0)}
-                  cible={Number(volume.row.valeur_cible ?? 0)}
+              {volumes.length === 0 ? (
+                <MainBar
+                  titre="Volume — mois"
+                  realise={realiseMois(c.acte)}
+                  cible={null}
                   suffixe=" actes"
-                  jours={volume.row.jours_travailles}
                 />
+              ) : (
+                <div className="space-y-4">
+                  {volumes.map(({ periode, obj }) => (
+                    <MainBar
+                      key={periode}
+                      titre={`Volume — ${PERIODE_LABEL[periode].toLowerCase()}`}
+                      source={obj.source}
+                      realise={Number(obj.row.volume_realise ?? 0)}
+                      cible={Number(obj.row.valeur_cible ?? 0)}
+                      suffixe=" actes"
+                      jours={obj.row.jours_travailles}
+                    />
+                  ))}
+                </div>
               )}
 
-              {taux && (
-                <Bloc
-                  titre={`Taux d'attachement (vs ${ACTE_A_TAUX[acte as keyof typeof ACTE_A_TAUX]})`}
-                  source={taux.source}
-                  realise={Number(taux.row.taux_realise ?? 0)}
-                  cible={Number(taux.row.valeur_cible ?? 0)}
-                  suffixe=" %"
-                  jours={null}
+              {option && (
+                <OptionBlock
+                  label={option.label}
+                  optionKey={option.key}
+                  parent={c.acte}
+                  ventesMois={ventesMois}
+                  taux={pickAny(option.key, "taux")}
+                  volume={pickAny(option.key, "volume")}
                 />
               )}
             </Card>
-          ))}
-        </div>
-      )}
+          );
+        })}
+      </div>
 
       <p className="text-xs text-slate-500">
         « Boutique » indique un objectif collectif appliqué faute d&apos;objectif
         individuel. Les cibles de période sont proratisées sur tes jours
-        travaillés (planning).
+        travaillés (planning). Le taux d&apos;une option = ventes avec
+        l&apos;option ÷ ventes du type d&apos;acte parent ce mois-ci.
       </p>
     </div>
   );
 }
 
-function Bloc({
+function SourceChip({ source }: { source: Source }) {
+  return (
+    <span
+      className={cx(
+        "chip",
+        source === "perso" ? "bg-brand/15 text-brand-soft" : "bg-slate-600/30 text-slate-300",
+      )}
+    >
+      {source === "perso" ? "Individuel" : "Boutique"}
+    </span>
+  );
+}
+
+function MainBar({
   titre,
   source,
   realise,
@@ -139,43 +174,162 @@ function Bloc({
   jours,
 }: {
   titre: string;
-  source: "perso" | "boutique";
+  source?: Source;
   realise: number;
-  cible: number;
+  cible: number | null;
   suffixe: string;
-  jours: number | null;
+  jours?: number | null;
 }) {
-  const p = cible > 0 ? pct(realise, cible) : 0;
+  const aCible = cible != null && cible > 0;
+  const p = aCible ? pct(realise, cible) : 0;
   return (
-    <div className="mt-4">
+    <div>
       <div className="flex items-center justify-between text-sm">
         <span className="text-slate-300">{titre}</span>
-        <span
-          className={`chip ${
-            source === "perso"
-              ? "bg-brand/15 text-brand-soft"
-              : "bg-slate-600/30 text-slate-300"
-          }`}
-        >
-          {source === "perso" ? "Individuel" : "Boutique"}
-        </span>
+        {source && <SourceChip source={source} />}
       </div>
-      <div className="mt-1.5 flex justify-between text-sm">
+      <div className="mt-1.5 flex items-baseline justify-between text-sm">
         <span className="font-medium tabular-nums text-white">
           {realise}
-          {suffixe} / {cible}
           {suffixe}
+          {aCible && (
+            <span className="text-slate-400">
+              {" "}
+              / {cible}
+              {suffixe}
+            </span>
+          )}
         </span>
-        <span className="text-slate-400">{p}%</span>
+        {aCible ? (
+          <span className="text-lg font-bold tabular-nums text-white">{p}%</span>
+        ) : (
+          <span className="text-xs text-slate-500">Aucun objectif défini</span>
+        )}
       </div>
       <div className="mt-1.5">
-        <ProgressBar value={p} />
+        {aCible ? <ProgressBar value={p} /> : <div className="h-2 w-full rounded-full bg-white/10" />}
       </div>
       {jours != null && (
-        <p className="mt-1 text-xs text-slate-500">
-          {jours} jour(s) travaillé(s) sur la période
-        </p>
+        <p className="mt-1 text-xs text-slate-500">{jours} jour(s) travaillé(s) sur la période</p>
       )}
+    </div>
+  );
+}
+
+function OptionBlock({
+  label,
+  optionKey,
+  parent,
+  ventesMois,
+  taux,
+  volume,
+}: {
+  label: string;
+  optionKey: OptionKey;
+  parent: ActeType;
+  ventesMois: Vente[];
+  taux: Choix | null;
+  volume: Choix | null;
+}) {
+  const t = tauxAttachement(ventesMois, optionKey);
+  const cibleTaux = taux ? Number(taux.row.valeur_cible ?? 0) : 0;
+  return (
+    <div className="mt-5 space-y-3 border-t border-line/60 pt-4">
+      <OptionBar
+        titre={`${label} — taux`}
+        source={taux?.source}
+        periode={taux ? PERIODE_LABEL[taux.row.periode] : null}
+        realise={t.taux}
+        cible={cibleTaux > 0 ? cibleTaux : null}
+        suffixe="%"
+        detail={`${t.attaches} / ${t.base} ${parent} ce mois`}
+      />
+      {volume && (
+        <OptionBar
+          titre={`${label} — volume`}
+          source={volume.source}
+          periode={PERIODE_LABEL[volume.row.periode]}
+          realise={Number(volume.row.volume_realise ?? 0)}
+          cible={Number(volume.row.valeur_cible ?? 0) || null}
+          suffixe=""
+        />
+      )}
+    </div>
+  );
+}
+
+/** Sous-objectif d'option : barre fine, icône, couleur secondaire. */
+function OptionBar({
+  titre,
+  source,
+  periode,
+  realise,
+  cible,
+  suffixe,
+  detail,
+}: {
+  titre: string;
+  source?: Source;
+  periode?: string | null;
+  realise: number;
+  cible: number | null;
+  suffixe: string;
+  detail?: string;
+}) {
+  const p = cible ? pct(realise, cible) : 0;
+  // Sans objectif : barre neutre à hauteur du réalisé (en % si c'est un taux).
+  const width = cible ? p : suffixe === "%" ? Math.min(100, realise) : 0;
+  return (
+    <div className="pl-3">
+      <div className="flex items-center gap-1.5 text-xs">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.8}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-3.5 w-3.5 shrink-0 text-violet-300"
+          aria-hidden
+        >
+          <path d="M12 3l8 3v6c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V6l8-3Z" />
+        </svg>
+        <span className="text-slate-300">{titre}</span>
+        {periode && <span className="text-slate-500">· {periode.toLowerCase()}</span>}
+        {source && (
+          <span className="ml-auto">
+            <SourceChip source={source} />
+          </span>
+        )}
+      </div>
+      <div className="mt-1 flex items-baseline justify-between text-xs">
+        <span className="tabular-nums text-white">
+          {realise}
+          {suffixe}
+          {cible != null && (
+            <span className="text-slate-400">
+              {" "}
+              / {cible}
+              {suffixe}
+            </span>
+          )}
+        </span>
+        {cible != null ? (
+          <span className="font-semibold tabular-nums text-violet-200">{p}%</span>
+        ) : (
+          <span className="text-slate-500">Aucun objectif défini</span>
+        )}
+      </div>
+      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+        <div
+          className={cx(
+            "h-full rounded-full transition-all duration-500",
+            cible == null ? "bg-slate-500" : p >= 100 ? "bg-emerald-400" : "bg-violet-400",
+          )}
+          style={{ width: `${Math.max(0, Math.min(100, Math.round(width)))}%` }}
+        />
+      </div>
+      {detail && <p className="mt-0.5 text-[11px] text-slate-500">{detail}</p>}
     </div>
   );
 }
