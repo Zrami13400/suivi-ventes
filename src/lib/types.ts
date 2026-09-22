@@ -59,7 +59,14 @@ export interface Vente {
   sous_type_id: string | null;
   modele_id: string | null;
   created_at: string;
+  /** Statut (migration 008). Une vente annulée est exclue de tous les chiffres. */
+  statut?: VenteStatut;
+  annulee_le?: string | null;
+  annulee_par?: string | null;
+  motif_annulation?: string | null;
 }
+
+export type VenteStatut = "validée" | "annulée";
 
 // Sous-produit d'un type d'acte, avec son montant de base €.
 export interface SousTypeActe {

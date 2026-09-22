@@ -105,6 +105,7 @@ export async function loadShopMonth(
       .from("ventes")
       .select("*")
       .eq("shop_id", shopId)
+      .eq("statut", "validée")
       .gte("created_at", range.start)
       .lt("created_at", range.end)
       .order("created_at", { ascending: false }),
@@ -112,6 +113,7 @@ export async function loadShopMonth(
       .from("ventes")
       .select("vendeur_id, quantity, created_at, acte_type")
       .eq("shop_id", shopId)
+      .eq("statut", "validée")
       .gte("created_at", prev.start)
       .lt("created_at", prev.end),
     supabase

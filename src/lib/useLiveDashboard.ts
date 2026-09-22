@@ -143,7 +143,7 @@ export function useLiveDashboard(props: LiveDashboardProps) {
         },
         (payload) => {
           const row = payload.new as Vente;
-          if (!row) return;
+          if (!row || row.statut === "annulée") return;
           const isToday = row.created_at.slice(0, 10) === today;
           const isMine = row.vendeur_id === vendeurId;
 
@@ -168,6 +168,29 @@ export function useLiveDashboard(props: LiveDashboardProps) {
                 setToasts((p) => [...p, { id: `${row.id}-${Date.now()}`, text }]);
               }
             }
+          }
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "ventes",
+          filter: `shop_id=eq.${shopId}`,
+        },
+        (payload) => {
+          // Vente annulée : elle disparaît de tous les compteurs, comme si
+          // elle n'avait jamais existé. La prime stockée arrive via
+          // primes_mensuelles (recalculée par trigger).
+          const row = payload.new as Vente;
+          if (!row || row.statut !== "annulée") return;
+          setShopVentes((p) => p.filter((v) => v.id !== row.id));
+          setSellerVentes((p) => p.filter((v) => v.id !== row.id));
+          if (row.created_at.slice(0, 10) === today) {
+            const key = `${row.vendeur_id}|${row.acte_type}`;
+            const prevTotal = todayTotalsRef.current.get(key) ?? 0;
+            todayTotalsRef.current.set(key, Math.max(0, prevTotal - row.quantity));
           }
         },
       )
@@ -199,8 +222,12 @@ export function useLiveDashboard(props: LiveDashboardProps) {
     [sellerVentes, shopVentes, pb, paliers, objectifsBoutiqueMois],
   );
 
+  // Sans vente validée, la ligne primes_mensuelles est supprimée côté base
+  // (évènement DELETE non filtrable en temps réel) : ne pas la réafficher.
   const breakdownTotal =
-    primeMensuelle && primeMensuelle.total_actes >= computed.totalActes
+    primeMensuelle &&
+    computed.totalActes > 0 &&
+    primeMensuelle.total_actes >= computed.totalActes
       ? primeMensuelle.prime_totale
       : computed.total;
 

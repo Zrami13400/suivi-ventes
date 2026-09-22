@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { AnnulerVenteButton } from "@/components/AnnulerVenteButton";
 import { LiveRefresh } from "@/components/LiveRefresh";
 import { Card, EmptyState, SectionTitle, cx } from "@/components/ui";
 import { getCurrentProfileOrNull } from "@/lib/auth";
@@ -10,7 +11,6 @@ import { createClient } from "@/lib/supabase/server";
 import type {
   ModeleTelephone,
   OptionFlat,
-  PrimeJournaliere,
   ReglePrime,
   SousTypeActe,
   Vente,
@@ -34,12 +34,12 @@ const PERIODES = [
 ] as const;
 type PeriodeKey = (typeof PERIODES)[number]["key"];
 
-type Statut = "comptabilisee" | "attente" | "sans_bareme";
-const STATUT_META: Record<Statut, { label: string; className: string }> = {
-  comptabilisee: { label: "Comptabilisée", className: "bg-emerald-500/15 text-emerald-200" },
-  attente: { label: "En attente", className: "bg-slate-600/30 text-slate-300" },
-  sans_bareme: { label: "Sans barème", className: "bg-amber-500/15 text-amber-200" },
-};
+const STATUTS = [
+  { key: "toutes", label: "Toutes" },
+  { key: "validees", label: "Validées" },
+  { key: "annulees", label: "Annulées" },
+] as const;
+type StatutFiltre = (typeof STATUTS)[number]["key"];
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -79,7 +79,7 @@ function formatJour(day: string): string {
 export default async function VentesPage({
   searchParams,
 }: {
-  searchParams: { p?: string; du?: string; au?: string; acte?: string };
+  searchParams: { p?: string; du?: string; au?: string; acte?: string; s?: string };
 }) {
   const profile = await getCurrentProfileOrNull();
   if (!profile) return null;
@@ -90,7 +90,11 @@ export default async function VentesPage({
     : "mois";
   const acte: ActeType | null =
     searchParams.acte && isActeType(searchParams.acte) ? searchParams.acte : null;
+  const statutFiltre: StatutFiltre = STATUTS.some((x) => x.key === searchParams.s)
+    ? (searchParams.s as StatutFiltre)
+    : "toutes";
   const { start, end } = resolvePeriode(periode, today, searchParams.du, searchParams.au);
+  const isAdmin = profile.role === "admin";
 
   const supabase = createClient();
   let ventesQuery = supabase
@@ -102,20 +106,13 @@ export default async function VentesPage({
     .order("created_at", { ascending: false });
   if (acte) ventesQuery = ventesQuery.eq("acte_type", acte);
 
-  const [ventesRes, sousTypesRes, reglesRes, modelesRes, optionsRes, primesJourRes] =
-    await Promise.all([
-      ventesQuery,
-      supabase.from("sous_types_actes").select("*").eq("shop_id", profile.shop_id),
-      supabase.from("regles_primes").select("*").eq("shop_id", profile.shop_id),
-      supabase.from("modeles_telephones").select("*").eq("shop_id", profile.shop_id),
-      supabase.from("options_flat").select("*").eq("shop_id", profile.shop_id),
-      supabase
-        .from("primes_journalieres")
-        .select("date, updated_at")
-        .eq("vendeur_id", profile.id)
-        .gte("date", start)
-        .lte("date", end),
-    ]);
+  const [ventesRes, sousTypesRes, reglesRes, modelesRes, optionsRes] = await Promise.all([
+    ventesQuery,
+    supabase.from("sous_types_actes").select("*").eq("shop_id", profile.shop_id),
+    supabase.from("regles_primes").select("*").eq("shop_id", profile.shop_id),
+    supabase.from("modeles_telephones").select("*").eq("shop_id", profile.shop_id),
+    supabase.from("options_flat").select("*").eq("shop_id", profile.shop_id),
+  ]);
 
   const ventes = (ventesRes.data ?? []) as Vente[];
   const pb = priceBook(
@@ -124,48 +121,43 @@ export default async function VentesPage({
     (modelesRes.data ?? []) as ModeleTelephone[],
     optionsRes.error ? null : ((optionsRes.data ?? []) as OptionFlat[]),
   );
-  const primeMajParJour = new Map(
-    ((primesJourRes.data ?? []) as Pick<PrimeJournaliere, "date" | "updated_at">[]).map(
-      (r) => [r.date, Date.parse(r.updated_at)],
-    ),
-  );
 
-  const lignes = ventes.map((v) => {
+  const toutes = ventes.map((v) => {
     const modele = v.modele_id ? pb.modeles.get(v.modele_id) : undefined;
     const sousType = v.sous_type_id ? pb.sousTypes.get(v.sous_type_id) : undefined;
     const produit = modele
       ? `${modele.marque} ${modele.nom}`.trim()
       : sousType?.nom ?? null;
-    const commission = ligneCommission(v, pb);
-    const maj = primeMajParJour.get(v.created_at.slice(0, 10));
-    // Pas de colonne statut en base : il est déduit du barème et du
-    // recalcul de la prime journalière (trigger sur ventes).
-    const statut: Statut =
-      commission <= 0
-        ? "sans_bareme"
-        : maj != null && maj >= Date.parse(v.created_at)
-          ? "comptabilisee"
-          : "attente";
+    const annulee = v.statut === "annulée";
     const d = new Date(v.created_at);
     return {
       v,
       produit,
-      commission,
-      statut,
+      annulee,
+      commission: ligneCommission(v, pb),
+      // Vendeur : ses ventes du jour seulement ; admin : toutes (cf. RLS 008).
+      annulable: !annulee && (isAdmin || v.created_at.slice(0, 10) === today),
       options: optionsCochees(v, pb),
       date: d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", timeZone: "Europe/Paris" }),
       heure: d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" }),
     };
   });
+  const lignes = toutes.filter((l) =>
+    statutFiltre === "validees" ? !l.annulee : statutFiltre === "annulees" ? l.annulee : true,
+  );
 
-  const nbActes = totalActes(ventes);
-  const totalCommission = lignes.reduce((s, l) => s + l.commission, 0);
+  // Totaux : ventes validées uniquement, quel que soit le filtre de statut.
+  const validees = toutes.filter((l) => !l.annulee);
+  const nbAnnulees = toutes.length - validees.length;
+  const nbActes = totalActes(validees.map((l) => l.v));
+  const totalCommission = validees.reduce((s, l) => s + l.commission, 0);
 
   const href = (patch: Record<string, string | null>) => {
     const q = new URLSearchParams();
     const merged: Record<string, string | null | undefined> = {
       p: periode,
       acte,
+      s: statutFiltre === "toutes" ? null : statutFiltre,
       du: periode === "perso" ? start : null,
       au: periode === "perso" ? end : null,
       ...patch,
@@ -199,6 +191,7 @@ export default async function VentesPage({
           <form key={`${start}_${end}`} action="/ventes" className="flex flex-wrap items-end gap-2">
             <input type="hidden" name="p" value="perso" />
             {acte && <input type="hidden" name="acte" value={acte} />}
+            {statutFiltre !== "toutes" && <input type="hidden" name="s" value={statutFiltre} />}
             <label className="text-xs text-slate-400">
               Du
               <input type="date" name="du" defaultValue={start} max={today} className="field mt-1" />
@@ -212,19 +205,32 @@ export default async function VentesPage({
             </button>
           </form>
         )}
-        <FilterRow label="Type d'acte">
-          <FilterChip href={href({ acte: null })} active={acte === null}>
-            Tous
-          </FilterChip>
-          {ACTE_TYPES.map((a) => (
-            <FilterChip key={a} href={href({ acte: a })} active={acte === a}>
-              {a}
+        <div className="flex flex-wrap gap-x-6 gap-y-3">
+          <FilterRow label="Type d'acte">
+            <FilterChip href={href({ acte: null })} active={acte === null}>
+              Tous
             </FilterChip>
-          ))}
-        </FilterRow>
+            {ACTE_TYPES.map((a) => (
+              <FilterChip key={a} href={href({ acte: a })} active={acte === a}>
+                {a}
+              </FilterChip>
+            ))}
+          </FilterRow>
+          <FilterRow label="Statut">
+            {STATUTS.map((x) => (
+              <FilterChip
+                key={x.key}
+                href={href({ s: x.key === "toutes" ? null : x.key })}
+                active={statutFiltre === x.key}
+              >
+                {x.label}
+              </FilterChip>
+            ))}
+          </FilterRow>
+        </div>
       </Card>
 
-      {/* Totaux */}
+      {/* Totaux (ventes validées) */}
       <div className="grid grid-cols-2 gap-3">
         <Card>
           <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
@@ -232,7 +238,8 @@ export default async function VentesPage({
           </p>
           <p className="mt-1 text-2xl font-bold tabular-nums text-white">{nbActes}</p>
           <p className="mt-0.5 text-xs text-slate-500">
-            {ventes.length} ligne{ventes.length > 1 ? "s" : ""}
+            {validees.length} vente{validees.length > 1 ? "s" : ""} validée
+            {validees.length > 1 ? "s" : ""}
           </p>
         </Card>
         <Card>
@@ -247,6 +254,12 @@ export default async function VentesPage({
           </p>
         </Card>
       </div>
+      {nbAnnulees > 0 && (
+        <p className="-mt-2 text-xs text-slate-500">
+          {nbAnnulees} vente{nbAnnulees > 1 ? "s" : ""} annulée{nbAnnulees > 1 ? "s" : ""} sur
+          la période, non comptée{nbAnnulees > 1 ? "s" : ""} dans les totaux.
+        </p>
+      )}
 
       {ventesRes.error && (
         <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
@@ -278,18 +291,21 @@ export default async function VentesPage({
                     <th className="px-4 py-3 font-medium">Options</th>
                     <th className="px-4 py-3 text-right font-medium">Commission</th>
                     <th className="px-4 py-3 font-medium">Statut</th>
+                    <th className="px-4 py-3" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line/60">
                   {lignes.map((l) => (
-                    <tr key={l.v.id}>
+                    <tr key={l.v.id} className={cx(l.annulee && "opacity-50")}>
                       <td className="whitespace-nowrap px-4 py-2.5 text-slate-400">
                         {l.date} <span className="text-slate-500">· {l.heure}</span>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-2.5">
+                      <td className={cx("whitespace-nowrap px-4 py-2.5", l.annulee && "line-through")}>
                         <ActeLabel acte={l.v.acte_type} />
                       </td>
-                      <td className="px-4 py-2.5 text-slate-300">{l.produit ?? "—"}</td>
+                      <td className={cx("px-4 py-2.5 text-slate-300", l.annulee && "line-through")}>
+                        {l.produit ?? "—"}
+                      </td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-white">
                         {l.v.quantity}
                       </td>
@@ -303,13 +319,24 @@ export default async function VentesPage({
                           {l.options.length === 0 && <span className="text-slate-600">—</span>}
                         </div>
                       </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-amber-300">
+                      <td
+                        className={cx(
+                          "px-4 py-2.5 text-right tabular-nums",
+                          l.annulee ? "text-slate-500 line-through" : "text-amber-300",
+                        )}
+                      >
                         {formatMoney(l.commission)}
                       </td>
                       <td className="px-4 py-2.5">
-                        <span className={cx("chip", STATUT_META[l.statut].className)}>
-                          {STATUT_META[l.statut].label}
-                        </span>
+                        <StatutBadge annulee={l.annulee} motif={l.v.motif_annulation} />
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {l.annulable && (
+                          <AnnulerVenteButton
+                            venteId={l.v.id}
+                            resume={`${l.produit ?? l.v.acte_type} × ${l.v.quantity}`}
+                          />
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -321,9 +348,9 @@ export default async function VentesPage({
           {/* Mobile : cartes empilées */}
           <ul className="space-y-2 md:hidden">
             {lignes.map((l) => (
-              <li key={l.v.id} className="card p-4">
+              <li key={l.v.id} className={cx("card p-4", l.annulee && "opacity-50")}>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
+                  <div className={cx("min-w-0", l.annulee && "line-through")}>
                     <ActeLabel acte={l.v.acte_type} />
                     <p className="mt-0.5 truncate text-sm text-slate-300">
                       {l.produit ?? "—"}
@@ -331,7 +358,12 @@ export default async function VentesPage({
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="font-semibold tabular-nums text-amber-300">
+                    <p
+                      className={cx(
+                        "font-semibold tabular-nums",
+                        l.annulee ? "text-slate-500 line-through" : "text-amber-300",
+                      )}
+                    >
                       {formatMoney(l.commission)}
                     </p>
                     <p className="text-xs text-slate-500">
@@ -345,10 +377,19 @@ export default async function VentesPage({
                       {o.nom}
                     </span>
                   ))}
-                  <span className={cx("chip ml-auto", STATUT_META[l.statut].className)}>
-                    {STATUT_META[l.statut].label}
+                  <span className="ml-auto flex items-center gap-2">
+                    <StatutBadge annulee={l.annulee} motif={l.v.motif_annulation} />
+                    {l.annulable && (
+                      <AnnulerVenteButton
+                        venteId={l.v.id}
+                        resume={`${l.produit ?? l.v.acte_type} × ${l.v.quantity}`}
+                      />
+                    )}
                   </span>
                 </div>
+                {l.annulee && l.v.motif_annulation && (
+                  <p className="mt-1.5 text-xs text-slate-500">Motif : {l.v.motif_annulation}</p>
+                )}
               </li>
             ))}
           </ul>
@@ -357,10 +398,22 @@ export default async function VentesPage({
 
       <p className="text-xs text-slate-500">
         « Commission » = montant du produit + bonus options, hors boosts
-        mensuels (le détail complet est sur ton tableau de bord). « Sans
-        barème » : aucun montant n&apos;est configuré pour ce produit.
+        mensuels (le détail complet est sur ton tableau de bord).
+        {isAdmin
+          ? " En tant qu'admin, tu peux annuler n'importe quelle vente."
+          : " Tu peux annuler tes ventes du jour ; pour une vente plus ancienne, demande à un admin."}
       </p>
     </div>
+  );
+}
+
+function StatutBadge({ annulee, motif }: { annulee: boolean; motif?: string | null }) {
+  return annulee ? (
+    <span className="chip bg-rose-500/15 text-rose-200" title={motif ?? undefined}>
+      Annulée
+    </span>
+  ) : (
+    <span className="chip bg-emerald-500/15 text-emerald-200">Validée</span>
   );
 }
 

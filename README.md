@@ -90,6 +90,25 @@ doit jamais être préfixée `NEXT_PUBLIC_` ni exposée au navigateur.
    select recalculer_primes_boutique(id) from shops;
    ```
 
+8. `migrations/007_options_flat.sql` — options « flat » éditables par l'admin
+   (`options_flat`, `ventes.options`).
+9. `migrations/008_statut_ventes.sql` — **statut des ventes** :
+   - `ventes.statut` (`validée` | `annulée`) + `annulee_le`, `annulee_par`,
+     `motif_annulation`. Une vente annulée est exclue de tous les chiffres
+     (primes, boosts, objectifs, classement, stats).
+   - Annulation = mise à jour (jamais de suppression). RLS : un vendeur
+     annule ses ventes du jour, un admin toute vente de sa boutique ; un
+     trigger interdit toute autre modification d'une vente.
+   - Trigger de recalcul sur annulation, fonctions de recalcul et vue
+     `progression_objectifs` filtrées sur `statut = 'validée'`.
+
+   **À exécuter avant de déployer le code** (les requêtes filtrent sur
+   `statut`). Puis, par sécurité :
+
+   ```sql
+   select recalculer_primes_boutique(id) from shops;
+   ```
+
 > Chaque section (Challenges, Planning, primes à paliers) se dégrade
 > proprement (bandeau d'avertissement) si sa migration n'a pas encore été
 > exécutée sur le projet Supabase.
@@ -128,7 +147,7 @@ doit jamais être préfixée `NEXT_PUBLIC_` ni exposée au navigateur.
 | `/login` | Connexion FreeKpi |
 | `/dashboard` (Accueil) | **Desktop** : bandeau « Bonjour … », cartes KPI, défi du jour, saisie d'acte, actes du jour. **Mobile (< lg)** : application une-page avec barre de navigation basse à 5 onglets (Accueil / Stats / Équipe / Prime / Plus), voir « Shell mobile » ci-dessous |
 | `/objectifs` | Par type d'acte : barres volume (mois / semaine / jour, individuel ou repli boutique) + sous-barres McAfee et Assurance mobile (taux d'attachement du mois vs cible, volume si défini) — temps réel |
-| `/ventes` | Journal détaillé des ventes (consultation seule) : filtres période + type d'acte, totaux actes / commission, tableau desktop / cartes mobile — temps réel |
+| `/ventes` | Journal détaillé des ventes : filtres période + type d'acte + statut, totaux actes / commission (ventes validées), annulation des ventes du jour avec motif, tableau desktop / cartes mobile — temps réel |
 | `/planning` | Planning du mois du vendeur (lecture seule) + répartition des statuts |
 | `/classement` | Classement d'équipe par actes + statut (🔥 ↑ → ↓), sélecteur de mois, couronne du top vendeur |
 | `/challenges` | Challenges En cours / À venir / Terminés, palmarès |
@@ -139,6 +158,7 @@ doit jamais être préfixée `NEXT_PUBLIC_` ni exposée au navigateur.
 | `/admin/primes` | Sous-produits (montant de base), paliers de boost individuel/collectif, bonus McAfee/Assurance |
 | `/admin/planning` | Grille mensuelle par vendeur, clic pour cycler Présent/Absent/Congé/Maladie/Formation |
 | `/admin/challenges` | Création / suppression de challenges |
+| `/admin/annulations` | Ventes annulées du mois (vendeur, date, acte, motif, annulée par) + annulation de toute vente de la boutique |
 | `/admin/modeles` | Catalogue des modèles de téléphones (marque, nom, montant de base, validité en mois) |
 
 ## Shell mobile (< lg)

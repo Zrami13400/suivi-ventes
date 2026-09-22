@@ -64,6 +64,7 @@ export default async function ChallengesPage() {
       .from("ventes")
       .select("*")
       .eq("shop_id", profile.shop_id)
+      .eq("statut", "validée")
       .gte("created_at", `${minDebut}T00:00:00`)
       .lte("created_at", `${maxFin}T23:59:59`);
     ventes = (ventesData ?? []) as Vente[];

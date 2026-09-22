@@ -51,6 +51,7 @@ export default async function ObjectifsPage() {
       .from("ventes")
       .select("*")
       .eq("vendeur_id", profile.id)
+      .eq("statut", "validée")
       .gte("created_at", range.start)
       .lt("created_at", range.end),
   ]);

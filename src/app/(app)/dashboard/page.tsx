@@ -74,6 +74,7 @@ export default async function DashboardPage({
     .from("ventes")
     .select("*")
     .eq("vendeur_id", profile.id)
+    .eq("statut", "validée")
     .gte("created_at", twoYearsAgo.toISOString())
     .order("created_at", { ascending: false });
   const sellerVentesExtended = (extRows ?? []) as Vente[];
