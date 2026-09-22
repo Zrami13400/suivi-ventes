@@ -1,5 +1,0 @@
-The runtime error is at dashboard/page.tsx line 67:
-
-const initialTab = isDashboardTab(searchParams.tab) ? searchParams.tab : "accueil";
-
-isDashboardTab is imported from the mobile DashboardTabContext but resolves to undefined at runtime. Check the DashboardTabContext file — make sure isDashboardTab is actually exported (export function / export const) and that the import statement matches exactly (named import vs default). Fix the mismatch, then verify the dashboard renders without crashing and the 5 tabs work.
