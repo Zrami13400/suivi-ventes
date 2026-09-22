@@ -13,6 +13,7 @@ export interface Profile {
   shop_id: string;
   nom_complet: string;
   role: Role;
+  avatar_url: string | null;
   created_at: string;
 }
 
@@ -50,7 +51,11 @@ export interface Vente {
   quantity: number;
   has_mcafee: boolean;
   has_assurance: boolean;
+  has_coque: boolean;
+  has_reprise: boolean;
+  has_garantie: boolean;
   sous_type_id: string | null;
+  modele_id: string | null;
   created_at: string;
 }
 
@@ -64,6 +69,22 @@ export interface SousTypeActe {
   ordre: number;
 }
 
+// Modèle de téléphone configurable par l'admin (migration 006), avec son
+// montant de base € et une durée de validité optionnelle (le modèle reste
+// utilisable pour les ventes déjà enregistrées même après expiration ;
+// seule sa proposition dans le formulaire de vente est filtrée).
+export interface ModeleTelephone {
+  id: string;
+  shop_id: string;
+  nom: string;
+  marque: string;
+  montant_base: number;
+  mois_validite: number | null;
+  actif: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // Ligne de barème "flat" par type d'acte et par boutique (bonus options +
 // montant par acte de repli quand aucun sous-type n'est renseigné).
 export interface ReglePrime {
@@ -73,6 +94,9 @@ export interface ReglePrime {
   montant_par_acte: number;
   bonus_mcafee: number;
   bonus_assurance: number;
+  bonus_coque: number;
+  bonus_reprise: number;
+  bonus_garantie: number;
 }
 
 // Paliers de boost par type d'acte.
@@ -105,6 +129,9 @@ export interface PrimeMensuelle {
   boost_collectif: number;
   bonus_mcafee: number;
   bonus_assurance: number;
+  bonus_coque: number;
+  bonus_reprise: number;
+  bonus_garantie: number;
   prime_totale: number;
   total_actes: number;
   updated_at: string;

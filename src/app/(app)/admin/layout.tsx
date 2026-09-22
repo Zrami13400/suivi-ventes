@@ -3,8 +3,10 @@ import { requireAdmin } from "@/lib/auth";
 
 const TABS = [
   { href: "/admin", label: "Vue d'ensemble" },
+  { href: "/admin/vendeurs", label: "Vendeurs" },
   { href: "/admin/objectifs", label: "Objectifs" },
   { href: "/admin/primes", label: "Règles de primes" },
+  { href: "/admin/modeles", label: "Modèles" },
   { href: "/admin/planning", label: "Planning" },
   { href: "/admin/challenges", label: "Challenges" },
 ];

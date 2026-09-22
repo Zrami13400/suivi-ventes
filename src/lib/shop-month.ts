@@ -10,6 +10,7 @@ import {
 } from "@/lib/kpi";
 import type { BadgeKey } from "@/lib/constants";
 import type {
+  ModeleTelephone,
   Objectif,
   PalierPrime,
   Planning,
@@ -52,6 +53,7 @@ export interface ShopMonth {
   regles: ReglePrime[];
   paliers: PalierPrime[];
   sousTypes: SousTypeActe[];
+  modeles: ModeleTelephone[];
   priceBook: PriceBook;
   objectifs: Objectif[];
   /** Objectif volume boutique du mois par type d'acte. */
@@ -60,6 +62,8 @@ export interface ShopMonth {
   planningByVendeur: Map<string, Planning[]>;
   ranking: RankRow[];
   badges: Map<string, BadgeKey[]>;
+  /** Actes du mois précédent par vendeur (pour les tendances). */
+  actesMoisPrecedent: Map<string, number>;
   /** true si la table `ventes` d'autres vendeurs est lisible (RLS boutique). */
   ventesCollectivesOk: boolean;
   /** true si la migration 003 (primes_mensuelles) est en place. */
@@ -88,6 +92,7 @@ export async function loadShopMonth(
     reglesRes,
     paliersRes,
     sousTypesRes,
+    modelesRes,
     objectifsRes,
     planningRes,
   ] = await Promise.all([
@@ -114,6 +119,7 @@ export async function loadShopMonth(
     supabase.from("regles_primes").select("*").eq("shop_id", shopId),
     supabase.from("paliers_primes").select("*").eq("shop_id", shopId),
     supabase.from("sous_types_actes").select("*").eq("shop_id", shopId),
+    supabase.from("modeles_telephones").select("*").eq("shop_id", shopId),
     supabase.from("objectifs").select("*").eq("shop_id", shopId),
     supabase
       .from("planning")
@@ -133,6 +139,9 @@ export async function loadShopMonth(
   const paliers = (paliersRes.data ?? []) as PalierPrime[];
   const sousTypes = ((sousTypesRes.data ?? []) as SousTypeActe[]).sort(
     (a, b) => a.acte_type.localeCompare(b.acte_type) || a.ordre - b.ordre,
+  );
+  const modeles = ((modelesRes.data ?? []) as ModeleTelephone[]).sort(
+    (a, b) => a.marque.localeCompare(b.marque) || a.nom.localeCompare(b.nom),
   );
   const objectifs = (objectifsRes.data ?? []) as Objectif[];
   const planning = (planningRes.data ?? []) as Planning[];
@@ -194,13 +203,15 @@ export async function loadShopMonth(
     regles,
     paliers,
     sousTypes,
-    priceBook: priceBook(sousTypes, regles),
+    modeles,
+    priceBook: priceBook(sousTypes, regles, modeles),
     objectifs,
     objectifsBoutiqueMois,
     planning,
     planningByVendeur,
     ranking,
     badges,
+    actesMoisPrecedent,
     ventesCollectivesOk,
     primesMensuellesOk: !primesMoisRes.error,
   };

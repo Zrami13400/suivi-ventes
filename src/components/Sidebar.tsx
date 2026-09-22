@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/app/login/actions";
 import type { Role } from "@/lib/types";
-import { cx } from "./ui";
+import { Avatar, cx } from "./ui";
 
 export interface NavItem {
   href: string;
@@ -62,10 +62,12 @@ function isActive(pathname: string, href: string) {
 export function Sidebar({
   role,
   nomComplet,
+  avatarUrl,
   shopNom,
 }: {
   role: Role;
   nomComplet: string;
+  avatarUrl?: string | null;
   shopNom: string;
 }) {
   const pathname = usePathname();
@@ -110,45 +112,19 @@ export function Sidebar({
       </nav>
 
       <form action={signOut} className="mt-4 border-t border-line pt-4">
-        <p className="px-3 text-sm font-medium text-white">{nomComplet}</p>
-        <p className="px-3 text-xs capitalize text-slate-500">{role}</p>
+        <div className="flex items-center gap-2.5 px-3">
+          <Avatar name={nomComplet} avatarUrl={avatarUrl} size={32} />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-white">
+              {nomComplet}
+            </p>
+            <p className="text-xs capitalize text-slate-500">{role}</p>
+          </div>
+        </div>
         <button type="submit" className="btn-ghost mt-3 w-full">
           Déconnexion
         </button>
       </form>
     </aside>
-  );
-}
-
-export function MobileNav({ role }: { role: Role }) {
-  const pathname = usePathname();
-  const items: NavItem[] = [
-    { href: "/dashboard", label: "Accueil", icon: "home" },
-    { href: "/ventes", label: "Actes", icon: "cart" },
-    { href: "/classement", label: "Stats", icon: "chart" },
-    { href: "/profil", label: "Profil", icon: "user" },
-    ...(role === "admin"
-      ? [{ href: "/admin", label: "Admin", icon: "shield" as const }]
-      : []),
-  ];
-  return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-surface/95 backdrop-blur lg:hidden">
-      {items.map((it) => {
-        const active = isActive(pathname, it.href);
-        return (
-          <Link
-            key={it.href}
-            href={it.href}
-            className={cx(
-              "flex flex-1 flex-col items-center gap-1 py-2 text-[11px] font-medium transition",
-              active ? "text-brand-soft" : "text-slate-400",
-            )}
-          >
-            <Icon d={ICONS[it.icon]} />
-            {it.label}
-          </Link>
-        );
-      })}
-    </nav>
   );
 }

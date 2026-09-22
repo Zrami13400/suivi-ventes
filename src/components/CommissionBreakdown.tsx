@@ -20,6 +20,9 @@ const LINES: {
   },
   { key: "bonusMcafee", label: "Bonus McAfee", hint: "attachement Freebox" },
   { key: "bonusAssurance", label: "Bonus Assurance", hint: "attachement Téléphone" },
+  { key: "bonusCoque", label: "Bonus Coque", hint: "attachement Téléphone" },
+  { key: "bonusReprise", label: "Bonus Reprise", hint: "attachement Téléphone" },
+  { key: "bonusGarantie", label: "Bonus Garantie", hint: "attachement Téléphone" },
 ];
 
 export function CommissionBreakdown({

@@ -14,6 +14,7 @@ import {
   type CategoryMeta,
 } from "./constants";
 import type {
+  ModeleTelephone,
   PalierPrime,
   Profile,
   ReglePrime,
@@ -40,15 +41,18 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 // ------------------------------------------------------------------
 export interface PriceBook {
   sousTypes: Map<string, SousTypeActe>;
+  modeles: Map<string, ModeleTelephone>;
   regles: Map<string, ReglePrime>;
 }
 
 export function priceBook(
   sousTypes: SousTypeActe[],
   regles: ReglePrime[],
+  modeles: ModeleTelephone[] = [],
 ): PriceBook {
   return {
     sousTypes: new Map(sousTypes.map((s) => [s.id, s])),
+    modeles: new Map(modeles.map((m) => [m.id, m])),
     regles: new Map(regles.map((r) => [r.acte_type, r])),
   };
 }
@@ -59,8 +63,13 @@ export function reglesByActe(regles: ReglePrime[]): Map<string, ReglePrime> {
 
 /** Montant de base € pour une ligne de vente (hors bonus, hors boosts). */
 export function venteBase(v: Vente, pb: PriceBook): number {
+  const modele = v.modele_id ? pb.modeles.get(v.modele_id) : undefined;
   const st = v.sous_type_id ? pb.sousTypes.get(v.sous_type_id) : undefined;
-  const base = st?.montant_base ?? pb.regles.get(v.acte_type)?.montant_par_acte ?? 0;
+  const base =
+    modele?.montant_base ??
+    st?.montant_base ??
+    pb.regles.get(v.acte_type)?.montant_par_acte ??
+    0;
   return v.quantity * base;
 }
 
@@ -69,7 +78,10 @@ export function ligneCommission(v: Vente, pb: PriceBook): number {
   const r = pb.regles.get(v.acte_type);
   const mca = v.has_mcafee ? v.quantity * (r?.bonus_mcafee ?? 0) : 0;
   const ass = v.has_assurance ? v.quantity * (r?.bonus_assurance ?? 0) : 0;
-  return venteBase(v, pb) + mca + ass;
+  const coq = v.has_coque ? v.quantity * (r?.bonus_coque ?? 0) : 0;
+  const rep = v.has_reprise ? v.quantity * (r?.bonus_reprise ?? 0) : 0;
+  const gar = v.has_garantie ? v.quantity * (r?.bonus_garantie ?? 0) : 0;
+  return venteBase(v, pb) + mca + ass + coq + rep + gar;
 }
 
 export interface PrimeParts {
@@ -97,6 +109,9 @@ export function primeParts(ventes: Vente[], pb: PriceBook): PrimeParts {
     } else if (v.acte_type === "Téléphone") {
       p.telephones += base;
       if (v.has_assurance) p.telephones += v.quantity * (r?.bonus_assurance ?? 0);
+      if (v.has_coque) p.telephones += v.quantity * (r?.bonus_coque ?? 0);
+      if (v.has_reprise) p.telephones += v.quantity * (r?.bonus_reprise ?? 0);
+      if (v.has_garantie) p.telephones += v.quantity * (r?.bonus_garantie ?? 0);
     }
   }
   p.total = p.box + p.forfaits + p.telephones + p.mcafee;
@@ -118,6 +133,9 @@ export interface CommissionBreakdown {
   boostCollectif: number;
   bonusMcafee: number;
   bonusAssurance: number;
+  bonusCoque: number;
+  bonusReprise: number;
+  bonusGarantie: number;
   total: number;
   totalActes: number;
 }
@@ -176,8 +194,23 @@ export function computeCommission(
     (s, v) => (v.acte_type === "Téléphone" && v.has_assurance ? s + v.quantity : s),
     0,
   );
+  const coqueQte = sellerVentesMois.reduce(
+    (s, v) => (v.acte_type === "Téléphone" && v.has_coque ? s + v.quantity : s),
+    0,
+  );
+  const repriseQte = sellerVentesMois.reduce(
+    (s, v) => (v.acte_type === "Téléphone" && v.has_reprise ? s + v.quantity : s),
+    0,
+  );
+  const garantieQte = sellerVentesMois.reduce(
+    (s, v) => (v.acte_type === "Téléphone" && v.has_garantie ? s + v.quantity : s),
+    0,
+  );
   const bonusMcafee = mcafeeQte * (rF?.bonus_mcafee ?? 0);
   const bonusAssurance = assuranceQte * (rT?.bonus_assurance ?? 0);
+  const bonusCoque = coqueQte * (rT?.bonus_coque ?? 0);
+  const bonusReprise = repriseQte * (rT?.bonus_reprise ?? 0);
+  const bonusGarantie = garantieQte * (rT?.bonus_garantie ?? 0);
 
   return {
     base: round2(base),
@@ -185,8 +218,18 @@ export function computeCommission(
     boostCollectif: round2(boostCollectif),
     bonusMcafee: round2(bonusMcafee),
     bonusAssurance: round2(bonusAssurance),
+    bonusCoque: round2(bonusCoque),
+    bonusReprise: round2(bonusReprise),
+    bonusGarantie: round2(bonusGarantie),
     total: round2(
-      base + boostIndividuel + boostCollectif + bonusMcafee + bonusAssurance,
+      base +
+        boostIndividuel +
+        boostCollectif +
+        bonusMcafee +
+        bonusAssurance +
+        bonusCoque +
+        bonusReprise +
+        bonusGarantie,
     ),
     totalActes,
   };

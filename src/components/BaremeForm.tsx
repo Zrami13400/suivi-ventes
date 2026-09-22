@@ -41,9 +41,12 @@ export default function BaremeForm({
   const [, startTransition] = useTransition();
 
   const paliersByActe = new Map(paliers.map((p) => [p.acte_type, p]));
+  const reglePhone = regles.find((r) => r.acte_type === "Téléphone");
   const mcafee = regles.find((r) => r.acte_type === "Freebox")?.bonus_mcafee ?? 0;
-  const assurance =
-    regles.find((r) => r.acte_type === "Téléphone")?.bonus_assurance ?? 0;
+  const assurance = reglePhone?.bonus_assurance ?? 0;
+  const coque = reglePhone?.bonus_coque ?? 0;
+  const reprise = reglePhone?.bonus_reprise ?? 0;
+  const garantie = reglePhone?.bonus_garantie ?? 0;
 
   function handleDelete(id: string) {
     const fd = new FormData();
@@ -182,6 +185,45 @@ export default function BaremeForm({
                 step="0.01"
                 min="0"
                 defaultValue={assurance}
+                className="field mt-1"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium uppercase tracking-wide text-slate-400">
+                Bonus Coque (€ / attachement, Téléphone)
+              </label>
+              <input
+                name="bonus_coque"
+                type="number"
+                step="0.01"
+                min="0"
+                defaultValue={coque}
+                className="field mt-1"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium uppercase tracking-wide text-slate-400">
+                Bonus Reprise (€ / attachement, Téléphone)
+              </label>
+              <input
+                name="bonus_reprise"
+                type="number"
+                step="0.01"
+                min="0"
+                defaultValue={reprise}
+                className="field mt-1"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium uppercase tracking-wide text-slate-400">
+                Bonus Garantie (€ / attachement, Téléphone)
+              </label>
+              <input
+                name="bonus_garantie"
+                type="number"
+                step="0.01"
+                min="0"
+                defaultValue={garantie}
                 className="field mt-1"
               />
             </div>

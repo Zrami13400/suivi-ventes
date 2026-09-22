@@ -68,6 +68,9 @@ export default async function ProfilPage() {
         boostCollectif: primeMensuelle.boost_collectif,
         bonusMcafee: primeMensuelle.bonus_mcafee,
         bonusAssurance: primeMensuelle.bonus_assurance,
+        bonusCoque: primeMensuelle.bonus_coque,
+        bonusReprise: primeMensuelle.bonus_reprise,
+        bonusGarantie: primeMensuelle.bonus_garantie,
         total: primeMensuelle.prime_totale,
         totalActes: primeMensuelle.total_actes,
       }
@@ -106,7 +109,11 @@ export default async function ProfilPage() {
   return (
     <div className="space-y-6">
       <Card className="flex flex-wrap items-center gap-4">
-        <Avatar name={profile.nom_complet} size={64} />
+        <Avatar
+          name={profile.nom_complet}
+          avatarUrl={profile.avatar_url}
+          size={64}
+        />
         <div className="min-w-0">
           <h1 className="text-xl font-bold text-white">{profile.nom_complet}</h1>
           <p className="text-sm text-slate-400">

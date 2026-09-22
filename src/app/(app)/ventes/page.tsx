@@ -16,7 +16,7 @@ import {
   objectifJourVendeur,
   totalActes,
 } from "@/lib/kpi";
-import { CATEGORIES } from "@/lib/constants";
+import { CATEGORIES, type ActeType } from "@/lib/constants";
 import { joursTravailles } from "@/lib/planning";
 import { loadShopMonth } from "@/lib/shop-month";
 
@@ -50,11 +50,17 @@ export default async function VentesPage() {
   const objCat = objectifJourParCategorie(dailyTarget, categoryMix(mine));
   const pb = sm.priceBook;
 
+  const progress: Partial<Record<ActeType, { realise: number; cible: number }>> =
+    {};
+  for (const c of CATEGORIES) {
+    progress[c.acte] = { realise: catToday[c.key], cible: objCat[c.key] };
+  }
+
   return (
     <div className="space-y-6">
       <Card>
         <SectionTitle>Enregistrer un acte</SectionTitle>
-        <SaleForm sousTypes={sm.sousTypes} />
+        <SaleForm sousTypes={sm.sousTypes} modeles={sm.modeles} progress={progress} />
       </Card>
 
       <div>
@@ -148,9 +154,28 @@ export default async function VentesPage() {
                               Assurance
                             </span>
                           )}
-                          {!v.has_mcafee && !v.has_assurance && (
-                            <span className="text-slate-600">—</span>
+                          {v.has_coque && (
+                            <span className="chip bg-sky-500/15 text-sky-200">
+                              Coque
+                            </span>
                           )}
+                          {v.has_reprise && (
+                            <span className="chip bg-amber-500/15 text-amber-200">
+                              Reprise
+                            </span>
+                          )}
+                          {v.has_garantie && (
+                            <span className="chip bg-fuchsia-500/15 text-fuchsia-200">
+                              Garantie
+                            </span>
+                          )}
+                          {!v.has_mcafee &&
+                            !v.has_assurance &&
+                            !v.has_coque &&
+                            !v.has_reprise &&
+                            !v.has_garantie && (
+                              <span className="text-slate-600">—</span>
+                            )}
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-amber-300">

@@ -88,10 +88,12 @@ export function Stat({
 
 export function Avatar({
   name,
+  avatarUrl,
   size = 40,
   className,
 }: {
   name: string;
+  avatarUrl?: string | null;
   size?: number;
   className?: string;
 }) {
@@ -101,6 +103,19 @@ export function Avatar({
     .slice(0, 2)
     .map((s) => s[0]?.toUpperCase() ?? "")
     .join("");
+
+  if (avatarUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={avatarUrl}
+        alt={name}
+        className={cx("shrink-0 rounded-full object-cover", className)}
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+
   return (
     <span
       className={cx(

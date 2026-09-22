@@ -26,8 +26,15 @@ export async function createVente(
     acte_type === ACTE_A_MCAFEE && formData.get("has_mcafee") === "on";
   const has_assurance =
     acte_type === ACTE_A_ASSURANCE && formData.get("has_assurance") === "on";
+  const has_coque =
+    acte_type === ACTE_A_ASSURANCE && formData.get("has_coque") === "on";
+  const has_reprise =
+    acte_type === ACTE_A_ASSURANCE && formData.get("has_reprise") === "on";
+  const has_garantie =
+    acte_type === ACTE_A_ASSURANCE && formData.get("has_garantie") === "on";
 
   const sousTypeRaw = String(formData.get("sous_type_id") ?? "").trim();
+  const modeleRaw = String(formData.get("modele_id") ?? "").trim();
   const supabase = createClient();
 
   // Vérifie que le sous-type appartient bien à la boutique et au type d'acte.
@@ -43,6 +50,20 @@ export async function createVente(
     }
   }
 
+  // Le modèle de téléphone (montant de base) n'est valide que pour un acte
+  // Téléphone et doit appartenir à la boutique de l'appelant.
+  let modele_id: string | null = null;
+  if (modeleRaw && acte_type === "Téléphone") {
+    const { data: mt } = await supabase
+      .from("modeles_telephones")
+      .select("id, shop_id")
+      .eq("id", modeleRaw)
+      .maybeSingle();
+    if (mt && mt.shop_id === profile.shop_id) {
+      modele_id = mt.id;
+    }
+  }
+
   const { error } = await supabase.from("ventes").insert({
     vendeur_id: profile.id,
     shop_id: profile.shop_id,
@@ -50,7 +71,11 @@ export async function createVente(
     quantity,
     has_mcafee,
     has_assurance,
+    has_coque,
+    has_reprise,
+    has_garantie,
     sous_type_id,
+    modele_id,
   });
 
   if (error) {

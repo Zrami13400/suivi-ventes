@@ -7,6 +7,7 @@ import {
   OBJECTIF_ACTE_FIELD_KEY,
   OBJECTIF_ACTE_TYPES,
 } from "@/lib/constants";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { PlanningStatut } from "@/lib/types";
 
@@ -28,6 +29,7 @@ function revalidateAll() {
     "/admin/objectifs",
     "/admin/primes",
     "/admin/planning",
+    "/admin/modeles",
     "/dashboard",
     "/objectifs",
     "/ventes",
@@ -276,7 +278,14 @@ export async function updateBaremePrimes(
   // 3. Bonus options (flat) sur regles_primes.
   const bonusMcafee = parseNum(formData.get("bonus_mcafee")) ?? 0;
   const bonusAssurance = parseNum(formData.get("bonus_assurance")) ?? 0;
-  if (Number.isNaN(bonusMcafee) || Number.isNaN(bonusAssurance)) {
+  const bonusCoque = parseNum(formData.get("bonus_coque")) ?? 0;
+  const bonusReprise = parseNum(formData.get("bonus_reprise")) ?? 0;
+  const bonusGarantie = parseNum(formData.get("bonus_garantie")) ?? 0;
+  if (
+    [bonusMcafee, bonusAssurance, bonusCoque, bonusReprise, bonusGarantie].some(
+      (n) => Number.isNaN(n),
+    )
+  ) {
     return { error: "Bonus option invalide.", success: false };
   }
 
@@ -303,6 +312,9 @@ export async function updateBaremePrimes(
           shop_id: admin.shop_id,
           acte_type: "Téléphone",
           bonus_assurance: bonusAssurance,
+          bonus_coque: bonusCoque,
+          bonus_reprise: bonusReprise,
+          bonus_garantie: bonusGarantie,
         },
       ],
       { onConflict: "shop_id,acte_type" },
@@ -433,4 +445,108 @@ export async function deleteChallenge(formData: FormData): Promise<void> {
   await supabase.from("challenges").delete().eq("id", id);
   revalidatePath("/admin/challenges");
   revalidatePath("/challenges");
+}
+
+// ============================================================
+// MODELES DE TELEPHONES (catalogue configurable)
+// ============================================================
+export async function createModele(formData: FormData): Promise<void> {
+  const admin = await requireAdmin();
+  const marque = String(formData.get("marque") ?? "").trim();
+  const nom = String(formData.get("nom") ?? "").trim();
+  const montant_base = parseNum(formData.get("montant_base")) ?? 0;
+  const moisRaw = String(formData.get("mois_validite") ?? "").trim();
+  const mois_validite = moisRaw ? Number(moisRaw) : null;
+
+  if (!marque || !nom || Number.isNaN(montant_base)) return;
+  if (mois_validite != null && (!Number.isInteger(mois_validite) || mois_validite <= 0)) {
+    return;
+  }
+
+  const supabase = createClient();
+  await supabase.from("modeles_telephones").insert({
+    shop_id: admin.shop_id,
+    marque,
+    nom,
+    montant_base,
+    mois_validite,
+    actif: true,
+  });
+  revalidatePath("/admin/modeles");
+  revalidatePath("/ventes");
+  revalidatePath("/dashboard");
+}
+
+export async function updateModele(formData: FormData): Promise<void> {
+  const admin = await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  const marque = String(formData.get("marque") ?? "").trim();
+  const nom = String(formData.get("nom") ?? "").trim();
+  const montant_base = parseNum(formData.get("montant_base")) ?? 0;
+  const moisRaw = String(formData.get("mois_validite") ?? "").trim();
+  const mois_validite = moisRaw ? Number(moisRaw) : null;
+  const actif = formData.get("actif") === "on";
+
+  if (!id || !marque || !nom || Number.isNaN(montant_base)) return;
+  if (mois_validite != null && (!Number.isInteger(mois_validite) || mois_validite <= 0)) {
+    return;
+  }
+
+  const supabase = createClient();
+  await supabase
+    .from("modeles_telephones")
+    .update({
+      marque,
+      nom,
+      montant_base,
+      mois_validite,
+      actif,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("shop_id", admin.shop_id);
+  revalidatePath("/admin/modeles");
+  revalidatePath("/ventes");
+  revalidatePath("/dashboard");
+}
+
+export async function deleteModele(formData: FormData): Promise<void> {
+  const admin = await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  const supabase = createClient();
+  await supabase
+    .from("modeles_telephones")
+    .delete()
+    .eq("id", id)
+    .eq("shop_id", admin.shop_id);
+  revalidatePath("/admin/modeles");
+  revalidatePath("/ventes");
+  revalidatePath("/dashboard");
+}
+
+// ============================================================
+// VENDEURS (création via /api/admin/create-seller ; suppression ici)
+// ============================================================
+export async function deleteSeller(formData: FormData): Promise<void> {
+  const admin = await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (!id || id === admin.id) return;
+
+  const supabase = createClient();
+  const { data: seller } = await supabase
+    .from("profiles")
+    .select("shop_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!seller || seller.shop_id !== admin.shop_id) return;
+
+  // Client service_role : la suppression du compte auth et la levée d'une
+  // éventuelle absence de politique RLS "delete" sur profiles nécessitent
+  // un accès privilégié, indépendant de la session de l'admin appelant.
+  const supabaseAdmin = createAdminClient();
+  await supabaseAdmin.from("profiles").delete().eq("id", id);
+  await supabaseAdmin.auth.admin.deleteUser(id);
+
+  revalidatePath("/admin/vendeurs");
 }

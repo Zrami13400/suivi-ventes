@@ -42,7 +42,11 @@ export function RankingTable({
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2.5">
-                    <Avatar name={r.vendeur.nom_complet} size={28} />
+                    <Avatar
+                      name={r.vendeur.nom_complet}
+                      avatarUrl={r.vendeur.avatar_url}
+                      size={28}
+                    />
                     <span className="font-medium text-white">
                       {r.vendeur.nom_complet}
                       {isSelf && (

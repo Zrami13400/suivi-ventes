@@ -39,3 +39,21 @@ export function repartitionStatuts(
 export function planningMap(planning: Planning[]): Map<string, PlanningStatut> {
   return new Map(planning.map((p) => [`${p.vendeur_id}|${p.date}`, p.statut]));
 }
+
+/**
+ * Série de jours "present" consécutifs jusqu'à `todayISO` inclus. Un jour
+ * sans entrée de planning n'arrête pas la série s'il s'agit d'aujourd'hui
+ * (pas encore pointé) ; tout autre trou l'arrête.
+ */
+export function presenceStreak(planning: Planning[], todayISO: string): number {
+  const statutByDate = new Map(planning.map((p) => [p.date, p.statut]));
+  let streak = 0;
+  const d = new Date(todayISO);
+  for (let i = 0; i < 60; i++) {
+    const iso = d.toISOString().slice(0, 10);
+    if (statutByDate.get(iso) === "present") streak++;
+    else if (i > 0) break;
+    d.setDate(d.getDate() - 1);
+  }
+  return streak;
+}

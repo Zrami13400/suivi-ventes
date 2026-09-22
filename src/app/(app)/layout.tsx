@@ -1,6 +1,9 @@
 import Link from "next/link";
-import { MobileNav, Sidebar } from "@/components/Sidebar";
+import { headers } from "next/headers";
+import { Sidebar } from "@/components/Sidebar";
 import { TopBanner } from "@/components/TopBanner";
+import { BottomNav } from "@/components/mobile/BottomNav";
+import { DashboardTabProvider } from "@/components/mobile/DashboardTabContext";
 import { signOut } from "@/app/login/actions";
 import { getCurrentProfileOrNull } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -41,37 +44,52 @@ export default async function AppLayout({
     .eq("id", profile.shop_id)
     .single();
 
+  // /dashboard construit son propre bloc identité + motivation ; le bandeau
+  // générique ne s'affiche que sur les autres pages.
+  const pathname = headers().get("x-pathname") ?? "";
+  const isDashboard = pathname === "/dashboard";
+
   return (
-    <div className="flex min-h-screen">
-      <Sidebar
-        role={profile.role}
-        nomComplet={profile.nom_complet}
-        shopNom={shop?.nom ?? ""}
-      />
+    <DashboardTabProvider>
+      <div className="flex min-h-screen">
+        <Sidebar
+          role={profile.role}
+          nomComplet={profile.nom_complet}
+          avatarUrl={profile.avatar_url}
+          shopNom={shop?.nom ?? ""}
+        />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* Barre mobile */}
-        <header className="flex items-center justify-between border-b border-line bg-surface/70 px-4 py-3 backdrop-blur lg:hidden">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-lg grad-freebox font-black text-white">
-              F
-            </span>
-            <span className="font-bold text-white">FreeKpi</span>
-          </Link>
-          <form action={signOut}>
-            <button type="submit" className="btn-ghost">
-              Déconnexion
-            </button>
-          </form>
-        </header>
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Barre mobile (masquée sur l'accueil, qui a son propre en-tête) */}
+          {!isDashboard && (
+            <header className="flex items-center justify-between border-b border-line bg-surface/70 px-4 py-3 backdrop-blur lg:hidden">
+              <Link href="/dashboard" className="flex items-center gap-2">
+                <span className="grid h-8 w-8 place-items-center rounded-lg grad-freebox font-black text-white">
+                  F
+                </span>
+                <span className="font-bold text-white">FreeKpi</span>
+              </Link>
+              <form action={signOut}>
+                <button type="submit" className="btn-ghost">
+                  Déconnexion
+                </button>
+              </form>
+            </header>
+          )}
 
-        <main className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 py-6 pb-24 lg:px-8 lg:pb-8">
-          <TopBanner nomComplet={profile.nom_complet} />
-          {children}
-        </main>
+          <main className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 py-6 pb-24 lg:px-8 lg:pb-8">
+            {!isDashboard && (
+              <TopBanner
+                nomComplet={profile.nom_complet}
+                avatarUrl={profile.avatar_url}
+              />
+            )}
+            {children}
+          </main>
+        </div>
+
+        <BottomNav />
       </div>
-
-      <MobileNav role={profile.role} />
-    </div>
+    </DashboardTabProvider>
   );
 }

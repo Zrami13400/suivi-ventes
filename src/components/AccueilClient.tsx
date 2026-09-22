@@ -1,279 +1,324 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { formatMoney, pct } from "@/lib/format";
-import {
-  actesParCategorie,
-  computeCommission,
-  objectifJourParCategorie,
-  priceBook,
-  totalActes,
-  type CatKey,
-  type CommissionBreakdown as Breakdown,
-} from "@/lib/kpi";
-import { CATEGORIES } from "@/lib/constants";
+import { useState } from "react";
+import { firstName, formatLongDate, formatMoney, motivation, pct } from "@/lib/format";
+import { ligneCommission, type CatKey } from "@/lib/kpi";
+import { useLiveDashboard } from "@/lib/useLiveDashboard";
 import type {
+  ModeleTelephone,
+  Objectif,
   PalierPrime,
   PrimeMensuelle,
   ReglePrime,
   SousTypeActe,
   Vente,
 } from "@/lib/types";
-import { CommissionBreakdown } from "./CommissionBreakdown";
-import { ProgressBar, cx } from "./ui";
+import SaleForm from "./SaleForm";
+import { Avatar, Card, EmptyState, ProgressBar, SectionTitle, cx } from "./ui";
 
 interface Props {
   vendeurId: string;
+  nomComplet: string;
+  avatarUrl: string | null;
+  shopId: string;
   today: string;
   moisDate: string;
   regles: ReglePrime[];
   paliers: PalierPrime[];
   sousTypes: SousTypeActe[];
+  modeles: ModeleTelephone[];
+  /** Objectifs visibles par ce vendeur (boutique + les siens, au minimum). */
+  objectifs: Objectif[];
   objectifsBoutiqueMois: Partial<Record<string, number>>;
   initialSellerVentesMois: Vente[];
   initialShopVentesMois: Vente[];
   initialPrimeMensuelle: PrimeMensuelle | null;
-  shop: {
-    objectifBoutiqueJour: number;
-    actesBoutiqueJour: number;
-    caBoutiqueJour: number;
-  };
   sellerDailyTarget: number;
   mix: Record<CatKey, number>;
+  dailyTargetMcafee: number;
+  dailyTargetAssurance: number;
+  presenceStreakDays: number;
+  rang: number | null;
+  totalSellers: number;
+  teammates: { id: string; nom_complet: string }[];
+}
+
+function ordinal(n: number): string {
+  return n === 1 ? "er" : "ème";
 }
 
 export default function AccueilClient({
   vendeurId,
+  nomComplet,
+  avatarUrl,
+  shopId,
   today,
   moisDate,
   regles,
   paliers,
   sousTypes,
+  modeles,
+  objectifs,
   objectifsBoutiqueMois,
   initialSellerVentesMois,
   initialShopVentesMois,
   initialPrimeMensuelle,
-  shop,
   sellerDailyTarget,
   mix,
+  dailyTargetMcafee,
+  dailyTargetAssurance,
+  presenceStreakDays,
+  rang,
+  totalSellers,
+  teammates,
 }: Props) {
-  const [sellerVentes, setSellerVentes] = useState<Vente[]>(
+  const [actesOpen, setActesOpen] = useState(false);
+  const {
+    live,
+    toasts,
+    pb,
+    breakdownTotal,
+    ventesToday,
+    ownActesToday,
+    defi,
+    progressForForm,
+  } = useLiveDashboard({
+    vendeurId,
+    shopId,
+    today,
+    moisDate,
+    regles,
+    paliers,
+    sousTypes,
+    modeles,
+    objectifs,
+    objectifsBoutiqueMois,
     initialSellerVentesMois,
-  );
-  const [shopVentes, setShopVentes] = useState<Vente[]>(initialShopVentesMois);
-  const [primeMensuelle, setPrimeMensuelle] = useState<PrimeMensuelle | null>(
+    initialShopVentesMois,
     initialPrimeMensuelle,
-  );
-  const [live, setLive] = useState(false);
+    sellerDailyTarget,
+    mix,
+    dailyTargetMcafee,
+    dailyTargetAssurance,
+    teammates,
+  });
 
-  useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`accueil-${vendeurId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "primes_mensuelles",
-          filter: `vendeur_id=eq.${vendeurId}`,
-        },
-        (payload) => {
-          const row = payload.new as PrimeMensuelle;
-          if (row && row.mois?.slice(0, 7) === moisDate.slice(0, 7)) {
-            setPrimeMensuelle(row);
-          }
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "ventes",
-          filter: `vendeur_id=eq.${vendeurId}`,
-        },
-        (payload) => {
-          const row = payload.new as Vente;
-          if (row && row.created_at.slice(0, 7) === moisDate.slice(0, 7)) {
-            setSellerVentes((p) =>
-              p.some((v) => v.id === row.id) ? p : [row, ...p],
-            );
-            setShopVentes((p) =>
-              p.some((v) => v.id === row.id) ? p : [row, ...p],
-            );
-          }
-        },
-      )
-      .subscribe((status) => setLive(status === "SUBSCRIBED"));
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [vendeurId, moisDate]);
-
-  const pb = useMemo(
-    () => priceBook(sousTypes, regles),
-    [sousTypes, regles],
-  );
-
-  const computed = useMemo(
-    () =>
-      computeCommission(sellerVentes, shopVentes, {
-        priceBook: pb,
-        regles,
-        paliers,
-        objectifsBoutiqueMois,
-      }),
-    [sellerVentes, shopVentes, pb, regles, paliers, objectifsBoutiqueMois],
-  );
-
-  // La ligne DB fait foi dès qu'elle a intégré toutes les ventes connues.
-  const breakdown: Breakdown =
-    primeMensuelle && primeMensuelle.total_actes >= computed.totalActes
-      ? {
-          base: primeMensuelle.prime_base,
-          boostIndividuel: primeMensuelle.boost_individuel,
-          boostCollectif: primeMensuelle.boost_collectif,
-          bonusMcafee: primeMensuelle.bonus_mcafee,
-          bonusAssurance: primeMensuelle.bonus_assurance,
-          total: primeMensuelle.prime_totale,
-          totalActes: primeMensuelle.total_actes,
-        }
-      : computed;
-
-  const ventesToday = sellerVentes.filter(
-    (v) => v.created_at.slice(0, 10) === today,
-  );
-  const ownActesToday = totalActes(ventesToday);
-  const parCatToday = actesParCategorie(ventesToday);
-  const objCat = objectifJourParCategorie(sellerDailyTarget, mix);
-  const boutiquePct = pct(shop.actesBoutiqueJour, shop.objectifBoutiqueJour);
+  const dateStr = formatLongDate();
+  const todayMotivation = motivation(today);
+  const classementLabel = rang ? `${rang}${ordinal(rang)} / ${totalSellers}` : "—";
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2 text-xs text-slate-400">
-        <span
-          className={cx(
-            "h-2 w-2 rounded-full",
-            live ? "bg-emerald-400" : "bg-amber-300",
-          )}
-        />
-        {live ? "Mise à jour en temps réel" : "Connexion temps réel…"}
+      {/* Notifications temps réel (achievements de l'équipe) */}
+      <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2 sm:bottom-6 sm:right-6">
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            className="pointer-events-auto max-w-xs rounded-lg border border-brand/30 bg-surface-strong/95 px-4 py-3 text-sm text-white shadow-glow backdrop-blur"
+          >
+            {t.text}
+          </div>
+        ))}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi
-          label="Objectif boutique"
-          value={`${shop.actesBoutiqueJour} / ${shop.objectifBoutiqueJour || "—"}`}
-          foot={<ProgressBar value={boutiquePct} tone="violet" />}
-          footText={`${boutiquePct}% de l'objectif du jour`}
-        />
-        <Kpi
-          label="CA du jour"
-          value={formatMoney(shop.caBoutiqueJour)}
-          badge={`${boutiquePct}%`}
-          footText="Estimé depuis le barème (base + bonus)"
-        />
-        <Kpi
-          label="Primes estimées"
-          value={formatMoney(breakdown.total)}
-          accent
-          footText="Ta commission individuelle ce mois-ci"
-        />
-        <Kpi
-          label="Total actes du jour"
-          value={String(ownActesToday)}
-          footText="Tes actes enregistrés aujourd'hui"
-        />
-      </div>
+      {/* Identité + motivation + défi du jour */}
+      <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
+        <div className="card p-6">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+              {dateStr.charAt(0).toUpperCase() + dateStr.slice(1)}
+            </p>
+            <span className="flex items-center gap-1.5 text-xs text-slate-500">
+              <span
+                className={cx(
+                  "h-2 w-2 rounded-full",
+                  live ? "bg-emerald-400" : "bg-amber-300",
+                )}
+              />
+              {live ? "Temps réel actif" : "Connexion…"}
+            </span>
+          </div>
 
-      <div>
-        <h2 className="mb-3 text-base font-semibold text-white">
-          Mes ventes du jour
-        </h2>
-        <div className="grid gap-4 lg:grid-cols-3">
-          {CATEGORIES.map((c) => {
-            const realise = parCatToday[c.key];
-            const cible = objCat[c.key];
-            const p = pct(realise, cible);
-            return (
-              <div key={c.key} className="card overflow-hidden p-5">
-                <div className={cx("-m-5 mb-4 p-4 text-white", c.grad)}>
-                  <p className="text-sm font-semibold uppercase tracking-wide">
-                    {c.label}
-                  </p>
-                  <p className="mt-1 text-3xl font-bold tabular-nums">
-                    {realise}
-                    <span className="ml-1 text-base font-medium opacity-80">
-                      / {cible || "—"}
-                    </span>
-                  </p>
-                </div>
-                <ProgressBar value={p} />
-                <p className="mt-1 text-right text-xs text-slate-400">{p}%</p>
-                <ul className="mt-3 space-y-1 text-xs text-slate-400">
-                  {c.sousTypes.map((s) => (
-                    <li key={s} className="flex items-center gap-1.5">
-                      <span className="h-1 w-1 rounded-full bg-slate-500" />
-                      {s}
-                    </li>
-                  ))}
-                  {c.options.map((o) => (
-                    <li key={o} className="flex items-center gap-1.5">
-                      <span className="h-1 w-1 rounded-full bg-brand-soft" />
-                      Option : {o}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
+          <div className="mt-3 flex flex-wrap items-center gap-4">
+            <Avatar
+              name={nomComplet}
+              avatarUrl={avatarUrl}
+              size={72}
+              className="ring-2 ring-white/10"
+            />
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold text-white sm:text-3xl">
+                Bonjour {firstName(nomComplet)} ! <span aria-hidden>👋</span>
+              </h1>
+              <p className="mt-1 text-sm text-slate-300">{todayMotivation}</p>
+              {presenceStreakDays > 0 && (
+                <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300">
+                  <span aria-hidden>🔥</span> {presenceStreakDays} jour
+                  {presenceStreakDays > 1 ? "s" : ""} consécutif
+                  {presenceStreakDays > 1 ? "s" : ""} de présence
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-3 gap-3">
+            <QuickStat label="Actes aujourd'hui" value={String(ownActesToday)} />
+            <QuickStat
+              label="Prime estimée"
+              value={formatMoney(breakdownTotal)}
+              accent
+            />
+            <QuickStat label="Classement" value={classementLabel} />
+          </div>
         </div>
+
+        <Card>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            Défi du jour
+          </p>
+          {defi.pick ? (
+            <>
+              <p className="mt-2 text-lg font-bold text-white">
+                Encore {defi.pick.cible - defi.pick.realise} {defi.pick.label}{" "}
+                aujourd&apos;hui
+              </p>
+              {defi.pick.bonusTotal != null && defi.pick.bonusTotal > 0 && (
+                <p className="mt-1 text-sm text-amber-300">
+                  +{formatMoney(defi.pick.bonusTotal)} de bonus à la clé 🎯
+                </p>
+              )}
+              <div className="mt-3">
+                <ProgressBar
+                  value={pct(defi.pick.realise, defi.pick.cible)}
+                  tone="violet"
+                />
+              </div>
+              <p className="mt-1 text-right text-xs text-slate-400">
+                {defi.pick.realise} / {defi.pick.cible}
+              </p>
+            </>
+          ) : defi.allDone ? (
+            <p className="mt-3 text-sm text-emerald-300">
+              Tous tes objectifs du jour sont atteints, bravo ! 🎉
+            </p>
+          ) : (
+            <p className="mt-3 text-sm text-slate-400">
+              Aucun objectif du jour défini pour l&apos;instant.
+            </p>
+          )}
+        </Card>
       </div>
 
-      <CommissionBreakdown data={breakdown} />
+      {/* Enregistrer un acte */}
+      <Card>
+        <SectionTitle>Enregistrer un acte</SectionTitle>
+        <div className="mt-4">
+          <SaleForm
+            sousTypes={sousTypes}
+            modeles={modeles}
+            progress={progressForForm}
+            initialActeType={null}
+          />
+        </div>
+      </Card>
+
+      {/* Mes actes du jour (repliable) */}
+      <Card className="p-0">
+        <button
+          type="button"
+          onClick={() => setActesOpen((o) => !o)}
+          className="flex w-full items-center justify-between px-5 py-4 text-left"
+          aria-expanded={actesOpen}
+        >
+          <span className="text-sm font-semibold text-white">
+            Mes actes du jour ({ownActesToday})
+          </span>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.7}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={cx(
+              "h-4 w-4 text-slate-400 transition-transform",
+              actesOpen && "rotate-180",
+            )}
+            aria-hidden
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+        {actesOpen && (
+          <div className="border-t border-line">
+            {ventesToday.length === 0 ? (
+              <div className="p-5">
+                <EmptyState>Aucun acte enregistré aujourd&apos;hui.</EmptyState>
+              </div>
+            ) : (
+              <div className="scrollbar-thin overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="border-b border-line text-left text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="px-4 py-2.5 font-medium">Heure</th>
+                      <th className="px-4 py-2.5 font-medium">Type</th>
+                      <th className="px-4 py-2.5 font-medium">Qté</th>
+                      <th className="px-4 py-2.5 text-right font-medium">
+                        Montant
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line/60">
+                    {ventesToday.map((v) => (
+                      <tr key={v.id}>
+                        <td className="px-4 py-2 text-slate-400">
+                          {new Date(v.created_at).toLocaleTimeString("fr-FR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </td>
+                        <td className="px-4 py-2 text-white">{v.acte_type}</td>
+                        <td className="px-4 py-2 tabular-nums text-white">
+                          {v.quantity}
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums text-amber-300">
+                          {formatMoney(ligneCommission(v, pb))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
 
-function Kpi({
+function QuickStat({
   label,
   value,
-  badge,
-  foot,
-  footText,
   accent,
 }: {
   label: string;
   value: string;
-  badge?: string;
-  foot?: React.ReactNode;
-  footText?: string;
   accent?: boolean;
 }) {
   return (
-    <div className="card p-5">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-          {label}
-        </p>
-        {badge && (
-          <span className="chip bg-brand/20 text-brand-soft">{badge}</span>
-        )}
-      </div>
+    <div className="rounded-lg border border-line bg-surface-strong p-3 text-center">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+        {label}
+      </p>
       <p
         className={cx(
-          "mt-2 text-2xl font-bold tabular-nums text-white",
-          accent &&
-            "bg-gradient-to-r from-amber-300 to-yellow-200 bg-clip-text text-transparent",
+          "mt-1 text-lg font-bold tabular-nums text-white sm:text-xl",
+          accent && "text-amber-300",
         )}
       >
         {value}
       </p>
-      {foot && <div className="mt-3">{foot}</div>}
-      {footText && <p className="mt-1 text-xs text-slate-500">{footText}</p>}
     </div>
   );
 }
