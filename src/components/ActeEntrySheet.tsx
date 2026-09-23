@@ -227,12 +227,15 @@ export function ActeEntrySheet({
           </div>
         )}
 
-        <div>
-          <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Quantité
-          </p>
-          <Stepper value={quantity} onChange={setQuantity} />
-        </div>
+        {/* Pas de volumétrie sur Freebox : la quantité reste à 1. */}
+        {!isFreebox && (
+          <div>
+            <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Quantité
+            </p>
+            <Stepper value={quantity} onChange={setQuantity} />
+          </div>
+        )}
 
         {flatOptions.length > 0 && (
           <div>

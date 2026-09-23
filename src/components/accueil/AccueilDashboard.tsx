@@ -316,7 +316,7 @@ export function AccueilDashboard(props: AccueilDashboardProps) {
               <p className="text-[11px] font-medium text-slate-400">Ta prime du jour</p>
               <AnimatedMoney
                 value={breakdownTotal}
-                className="text-2xl font-black leading-none tabular-nums text-amber-300 sm:text-4xl"
+                className="text-[23px] font-black leading-none tabular-nums text-amber-300 sm:text-[34px]"
               />
               <p
                 className={cx(
