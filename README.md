@@ -108,6 +108,17 @@ doit jamais être préfixée `NEXT_PUBLIC_` ni exposée au navigateur.
    ```sql
    select recalculer_primes_boutique(id) from shops;
    ```
+10. `migrations/009_numero_client.sql` — `ventes.numero_client` (Freebox,
+    facultatif), non modifiable après saisie.
+11. `migrations/010_recalcul_annulations.sql` — filet de sécurité du
+    recalcul après annulation + rattrapage du mois en cours.
+12. `migrations/011_rls_tables_initiales.sql` — versionne les politiques
+    RLS de `profiles`, `shops`, `ventes` (insertion), `primes_journalieres`,
+    `objectifs` et `regles_primes`, qui ne venaient que de `schema.sql`.
+    Supprime les politiques existantes de ces tables (sauf celles des
+    migrations 002 et 008) puis les recrée. Passe la vue
+    `progression_objectifs` en `security_invoker` pour qu'elle respecte la
+    RLS (à reposer si une migration future recrée la vue).
 
 > Chaque section (Challenges, Planning, primes à paliers) se dégrade
 > proprement (bandeau d'avertissement) si sa migration n'a pas encore été
@@ -200,20 +211,30 @@ Le tableau de bord d'un vendeur (`src/components/AccueilClient.tsx`) s'abonne
 direct — y compris quand le boost collectif change suite à une vente d'un
 autre vendeur (le trigger recalcule toute la boutique à chaque vente).
 
-## Politiques RLS attendues
+## Politiques RLS
 
-- `profiles` : chaque profil lit au moins sa boutique.
-- `ventes` : **lecture autorisée sur toute la boutique** (`shop_id` du profil)
-  — nécessaire pour le classement, les stats d'équipe et le calcul du boost
-  collectif. Politique `ventes_select_boutique` (migration 002).
-- `primes_journalieres` / `primes_mensuelles` : chaque vendeur lit
+Toutes les politiques sont versionnées dans `migrations/` (migration entre
+parenthèses).
+
+- `profiles` : lecture de son profil et de ceux de sa boutique (011). Aucune
+  écriture côté client : tout passe par la clé service_role.
+- `shops` : lecture de sa boutique (011).
+- `ventes` : **lecture autorisée sur toute la boutique** (002) — nécessaire
+  pour le classement, les stats d'équipe et le calcul du boost collectif.
+  Insertion de ses propres ventes (011), annulation (008), aucune
+  suppression.
+- `primes_journalieres` (011) / `primes_mensuelles` (003) : chaque vendeur lit
   **uniquement ses lignes** ; les admins lisent celles de leur boutique.
-- `planning` : chaque vendeur lit uniquement ses lignes ; l'admin gère tout
-  le planning de sa boutique (lecture + écriture).
-- `sous_types_actes` / `paliers_primes` / `modeles_telephones` : lecture par
-  tout membre de la boutique (nécessaire côté vendeur pour le formulaire de
-  vente et l'estimation de prime), écriture réservée aux admins.
-- `objectifs` / `regles_primes` / `challenges` : gestion réservée aux admins.
+- `planning` (003) : chaque vendeur lit uniquement ses lignes ; l'admin gère
+  tout le planning de sa boutique (lecture + écriture).
+- `sous_types_actes` (003) / `paliers_primes` (003) / `modeles_telephones`
+  (006) / `options_flat` (007) / `regles_primes` (011) : lecture par tout
+  membre de la boutique (formulaire de vente, estimation de prime),
+  écriture réservée aux admins.
+- `objectifs` (011) : un vendeur lit les objectifs boutique et les siens ;
+  l'admin lit et gère tous ceux de sa boutique.
+- `challenges` (002) : lecture par la boutique, gestion réservée aux admins.
+- Storage `avatars` (005) : lecture publique, écriture admin.
 
 ## Architecture
 
