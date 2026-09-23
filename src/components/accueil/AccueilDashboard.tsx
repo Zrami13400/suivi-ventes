@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { firstName, formatMoney, pct } from "@/lib/format";
+import { firstName, formatMoney, motivation, pct } from "@/lib/format";
 import { computeCommission, mostFrequentActeType, objectifVolumeJour } from "@/lib/kpi";
 import { CATEGORIES, type ActeType } from "@/lib/constants";
 import { useLiveDashboard, type LiveDashboardProps } from "@/lib/useLiveDashboard";
@@ -269,7 +269,7 @@ export function AccueilDashboard(props: AccueilDashboardProps) {
                 <Avatar
                   name={nomComplet}
                   avatarUrl={avatarUrl}
-                  size={90}
+                  size={100}
                   className="ring-2 ring-amber-300/80 ring-offset-2 ring-offset-surface"
                 />
               </Link>
@@ -277,6 +277,9 @@ export function AccueilDashboard(props: AccueilDashboardProps) {
                 <h1 className="text-2xl font-black leading-tight text-white sm:text-4xl">
                   Bonjour {firstName(nomComplet)} <span aria-hidden>👋</span>
                 </h1>
+                <p className="mt-1.5 text-sm italic text-slate-300 sm:text-base">
+                  {motivation(today)}
+                </p>
                 <p className="mt-1 truncate text-sm text-slate-400">
                   {role === "admin" ? "Admin" : "Vendeur"}
                   {shopNom ? ` • Boutique ${shopNom}` : ""}

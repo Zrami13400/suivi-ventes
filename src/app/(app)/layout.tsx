@@ -2,6 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { Sidebar } from "@/components/Sidebar";
 import { TopBanner } from "@/components/TopBanner";
+import { HideOnDashboard } from "@/components/HideOnDashboard";
 import { BottomNav } from "@/components/mobile/BottomNav";
 import { DashboardTabProvider } from "@/components/mobile/DashboardTabContext";
 import { signOut } from "@/app/login/actions";
@@ -78,12 +79,12 @@ export default async function AppLayout({
           )}
 
           <main className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 py-6 pb-24 lg:px-8 lg:pb-8">
-            {!isDashboard && (
+            <HideOnDashboard>
               <TopBanner
                 nomComplet={profile.nom_complet}
                 avatarUrl={profile.avatar_url}
               />
-            )}
+            </HideOnDashboard>
             {children}
           </main>
         </div>
