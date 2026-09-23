@@ -195,7 +195,7 @@ export default async function VentesPage({
           {acte && <input type="hidden" name="acte" value={acte} />}
           {statutFiltre !== "toutes" && <input type="hidden" name="s" value={statutFiltre} />}
           <label className="sr-only" htmlFor="recherche-nc">
-            Numéro client
+            ID client
           </label>
           <input
             id="recherche-nc"
@@ -204,7 +204,7 @@ export default async function VentesPage({
             defaultValue={numeroClient}
             maxLength={64}
             autoComplete="off"
-            placeholder="Rechercher un numéro client…"
+            placeholder="Rechercher un ID client…"
             className="field min-w-0 flex-1"
           />
           <button type="submit" className="btn-primary shrink-0">
@@ -218,7 +218,7 @@ export default async function VentesPage({
         </form>
         {numeroClient && (
           <p className="text-xs text-slate-400">
-            Ventes dont le numéro client contient « {numeroClient} », sur la période
+            Ventes dont l&apos;ID client contient « {numeroClient} », sur la période
             sélectionnée.
           </p>
         )}
@@ -317,7 +317,7 @@ export default async function VentesPage({
       {lignes.length === 0 ? (
         <EmptyState>
           {numeroClient
-            ? `Aucune vente avec le numéro client « ${numeroClient} » sur cette période. `
+            ? `Aucune vente avec l'ID client « ${numeroClient} » sur cette période. `
             : "Aucune vente sur cette période. "}
           Les actes s&apos;enregistrent depuis
           l&apos;onglet{" "}
@@ -337,6 +337,7 @@ export default async function VentesPage({
                     <th className="px-4 py-3 font-medium">Date</th>
                     <th className="px-4 py-3 font-medium">Acte</th>
                     <th className="px-4 py-3 font-medium">Produit</th>
+                    <th className="px-4 py-3 font-medium">ID client</th>
                     <th className="px-4 py-3 text-right font-medium">Qté</th>
                     <th className="px-4 py-3 font-medium">Options</th>
                     <th className="px-4 py-3 text-right font-medium">Commission</th>
@@ -357,7 +358,13 @@ export default async function VentesPage({
                         <span className={cx("text-slate-300", l.annulee && "line-through")}>
                           {l.produit ?? "—"}
                         </span>
-                        {l.v.numero_client && <NumeroClient value={l.v.numero_client} />}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2.5">
+                        {l.v.numero_client ? (
+                          <span className="font-mono text-slate-300">{l.v.numero_client}</span>
+                        ) : (
+                          <span className="text-slate-600">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-white">
                         {l.v.quantity}
@@ -410,8 +417,8 @@ export default async function VentesPage({
                         {l.produit ?? "—"}
                         <span className="text-slate-500"> × {l.v.quantity}</span>
                       </p>
+                      {l.v.numero_client && <NumeroClient value={l.v.numero_client} />}
                     </div>
-                    {l.v.numero_client && <NumeroClient value={l.v.numero_client} />}
                   </div>
                   <div className="shrink-0 text-right">
                     <p
@@ -476,7 +483,7 @@ function StatutBadge({ annulee, motif }: { annulee: boolean; motif?: string | nu
 function NumeroClient({ value }: { value: string }) {
   return (
     <p className="mt-0.5 truncate text-xs text-slate-500">
-      N° client <span className="font-mono text-slate-400">{value}</span>
+      ID client <span className="font-mono text-slate-400">{value}</span>
     </p>
   );
 }

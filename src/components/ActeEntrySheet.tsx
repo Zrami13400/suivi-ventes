@@ -210,7 +210,7 @@ export function ActeEntrySheet({
               htmlFor="numero-client"
               className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400"
             >
-              Numéro client <span className="font-normal normal-case text-slate-500">(facultatif)</span>
+              ID client <span className="font-normal normal-case text-slate-500">(optionnel)</span>
             </label>
             <input
               id="numero-client"
@@ -223,7 +223,7 @@ export function ActeEntrySheet({
               placeholder="Ex. 12345678"
               className="field min-h-[48px] text-base"
             />
-            <p className="mt-1.5 text-xs text-slate-500">Facilite le suivi du dossier.</p>
+            <p className="mt-1.5 text-xs text-slate-500">Optionnel — pour suivre le dossier</p>
           </div>
         )}
 
