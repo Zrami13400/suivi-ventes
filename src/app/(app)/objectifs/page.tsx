@@ -37,7 +37,7 @@ export default async function ObjectifsPage() {
   const today = todayISO();
   const mois = currentMonth();
   const range = monthRange(mois);
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const [progRes, ventesRes] = await Promise.all([
     supabase

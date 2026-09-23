@@ -17,7 +17,7 @@ const SECTIONS: { statut: ChallengeStatut; label: string }[] = [
 export default async function ChallengesPage() {
   const profile = await getCurrentProfileOrNull();
   if (!profile) return null;
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: sellersData } = await supabase
     .from("profiles")

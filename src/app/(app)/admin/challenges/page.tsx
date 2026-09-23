@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminChallengesPage() {
   const admin = await requireAdmin();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: vendeursData } = await supabase
     .from("profiles")

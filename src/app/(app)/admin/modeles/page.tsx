@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminModelesPage() {
   const admin = await requireAdmin();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("modeles_telephones")

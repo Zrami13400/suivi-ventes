@@ -1,8 +1,8 @@
 "use client";
 
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import { useFormStatus } from "react-dom";
 import {
   addSousType,
   deleteSousType,
@@ -40,7 +40,7 @@ export default function BaremeForm({
   /** Nombre de ventes (toutes périodes) où chaque option est cochée. */
   usage: Record<string, number>;
 }) {
-  const [state, formAction] = useFormState(updateBaremePrimes, {
+  const [state, formAction] = useActionState(updateBaremePrimes, {
     error: null,
     success: false,
   });

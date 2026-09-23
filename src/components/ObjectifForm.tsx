@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState, useEffect, useRef } from "react";
+import { useFormStatus } from "react-dom";
 import { createObjectif } from "@/app/(app)/admin/actions";
 import {
   ACTE_A_TAUX,
@@ -28,7 +28,7 @@ export default function ObjectifForm({
 }: {
   vendeurs: VendeurOption[];
 }) {
-  const [state, formAction] = useFormState(createObjectif, {
+  const [state, formAction] = useActionState(createObjectif, {
     error: null,
     success: false,
   });

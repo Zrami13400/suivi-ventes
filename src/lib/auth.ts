@@ -7,7 +7,7 @@ import type { Profile } from "@/lib/types";
  * there is no session, and throws when the profile row is missing.
  */
 export async function getCurrentProfileOrNull(): Promise<Profile | null> {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

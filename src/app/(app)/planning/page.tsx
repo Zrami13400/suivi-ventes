@@ -10,10 +10,11 @@ import type { Planning } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export default async function PlanningPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { mois?: string };
+  searchParams: Promise<{ mois?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const profile = await getCurrentProfileOrNull();
   if (!profile) return null;
 
@@ -22,7 +23,7 @@ export default async function PlanningPage({
     : currentMonth();
   const range = monthRange(mois);
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data, error } = await supabase
     .from("planning")
     .select("*")

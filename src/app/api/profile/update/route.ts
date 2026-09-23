@@ -14,7 +14,7 @@ function fail(error: string, status = 400) {
 // ici (réservés à l'admin via /api/admin/update-seller). Le mot de passe se
 // change côté client avec supabase.auth.updateUser.
 export async function POST(request: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState, useEffect, useRef } from "react";
+import { useFormStatus } from "react-dom";
 import { createChallenge } from "@/app/(app)/admin/actions";
 
 interface VendeurOption {
@@ -23,7 +23,7 @@ export default function ChallengeForm({
 }: {
   vendeurs: VendeurOption[];
 }) {
-  const [state, formAction] = useFormState(createChallenge, {
+  const [state, formAction] = useActionState(createChallenge, {
     error: null,
     success: false,
   });

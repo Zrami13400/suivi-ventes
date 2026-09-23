@@ -81,7 +81,7 @@ export async function loadShopMonth(
   shopId: string,
   mois: string = currentMonth(),
 ): Promise<ShopMonth> {
-  const supabase = createClient();
+  const supabase = await createClient();
   const range = monthRange(mois);
   const prev = monthRange(prevMonth(mois));
   const moisDate = `${mois}-01`;

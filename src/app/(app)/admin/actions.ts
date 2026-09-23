@@ -123,7 +123,7 @@ export async function createObjectif(
     return { error: "Renseignez au moins une cible.", success: false };
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // Idempotence : remplace les objectifs de même portée/période/dates/type.
   for (const r of rows) {
@@ -154,7 +154,7 @@ export async function updateObjectifValeur(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   const v = parseNum(formData.get("valeur_cible"));
   if (!id || v == null || Number.isNaN(v)) return;
-  const supabase = createClient();
+  const supabase = await createClient();
   await supabase
     .from("objectifs")
     .update({ valeur_cible: v, nb_ventes_cible: Math.round(v) })
@@ -166,7 +166,7 @@ export async function deleteObjectif(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  const supabase = createClient();
+  const supabase = await createClient();
   await supabase.from("objectifs").delete().eq("id", id);
   revalidateAll();
 }
@@ -191,7 +191,7 @@ export async function setPlanning(
   if (!/^[0-9a-f-]{36}$/i.test(vendeurId) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return { error: "Paramètres invalides." };
   }
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // Le vendeur doit appartenir à la boutique de l'admin.
   const { data: v } = await supabase
@@ -234,7 +234,7 @@ export async function updateBaremePrimes(
   formData: FormData,
 ): Promise<FormResult> {
   const admin = await requireAdmin();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // 1. Montants de base des sous-types (champs "st__<id>").
   const sousTypeUpdates: { id: string; montant_base: number }[] = [];
@@ -379,7 +379,7 @@ async function saveOptionsFlat(
   shopId: string,
   options: OptionInput[],
 ): Promise<string | null> {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: existing, error } = await supabase
     .from("options_flat")
     .select("id")
@@ -445,7 +445,7 @@ export async function addSousType(formData: FormData): Promise<void> {
   ) {
     return;
   }
-  const supabase = createClient();
+  const supabase = await createClient();
   await supabase.from("sous_types_actes").insert({
     shop_id: admin.shop_id,
     acte_type,
@@ -461,7 +461,7 @@ export async function deleteSousType(formData: FormData): Promise<void> {
   const admin = await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  const supabase = createClient();
+  const supabase = await createClient();
   await supabase
     .from("sous_types_actes")
     .delete()
@@ -514,7 +514,7 @@ export async function createChallenge(
     return { error: "Prime bonus invalide.", success: false };
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.from("challenges").insert({
     shop_id: admin.shop_id,
     titre,
@@ -538,7 +538,7 @@ export async function deleteChallenge(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  const supabase = createClient();
+  const supabase = await createClient();
   await supabase.from("challenges").delete().eq("id", id);
   revalidatePath("/admin/challenges");
   revalidatePath("/challenges");
@@ -560,7 +560,7 @@ export async function createModele(formData: FormData): Promise<void> {
     return;
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   await supabase.from("modeles_telephones").insert({
     shop_id: admin.shop_id,
     marque,
@@ -589,7 +589,7 @@ export async function updateModele(formData: FormData): Promise<void> {
     return;
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   await supabase
     .from("modeles_telephones")
     .update({
@@ -611,7 +611,7 @@ export async function deleteModele(formData: FormData): Promise<void> {
   const admin = await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  const supabase = createClient();
+  const supabase = await createClient();
   await supabase
     .from("modeles_telephones")
     .delete()
@@ -630,7 +630,7 @@ export async function deleteSeller(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id || id === admin.id) return;
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: seller } = await supabase
     .from("profiles")
     .select("shop_id")

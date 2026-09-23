@@ -47,7 +47,7 @@ export default async function ProfilPage() {
 
   const {
     data: { user },
-  } = await createClient().auth.getUser();
+  } = await (await createClient()).auth.getUser();
   const email = user?.email ?? "";
 
   const mois = currentMonth();

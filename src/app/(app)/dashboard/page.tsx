@@ -21,10 +21,11 @@ import type { Planning, Vente } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { tab?: string };
+  searchParams: Promise<{ tab?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const profile = await getCurrentProfileOrNull();
   if (!profile) return null;
 
@@ -70,7 +71,7 @@ export default async function DashboardPage({
   // --- Données additionnelles pour le shell mobile (5 onglets) -----------
   const initialTab = isDashboardTab(searchParams.tab) ? searchParams.tab : "accueil";
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const twoYearsAgo = new Date();
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 1, 0, 1);
   const { data: extRows } = await supabase

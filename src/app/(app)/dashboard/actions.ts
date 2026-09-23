@@ -37,7 +37,7 @@ export async function createVente(
     acte_type === "Freebox"
       ? String(formData.get("numero_client") ?? "").trim().slice(0, 64) || null
       : null;
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // Options cochées : ids d'options_flat ("option_ids", multiple). Les
   // anciens champs has_<clé>=on restent acceptés.

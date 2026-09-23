@@ -8,10 +8,11 @@ import { loadShopMonth } from "@/lib/shop-month";
 export const dynamic = "force-dynamic";
 
 export default async function ClassementPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { mois?: string };
+  searchParams: Promise<{ mois?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const profile = await getCurrentProfileOrNull();
   if (!profile) return null;
 

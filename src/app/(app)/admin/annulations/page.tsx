@@ -22,16 +22,17 @@ const fmt = (iso: string | null | undefined) =>
     : "—";
 
 export default async function AdminAnnulationsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { mois?: string; vendeur?: string };
+  searchParams: Promise<{ mois?: string; vendeur?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const admin = await requireAdmin();
   const mois = /^\d{4}-\d{2}$/.test(searchParams.mois ?? "")
     ? (searchParams.mois as string)
     : currentMonth();
   const range = monthRange(mois);
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const [ventesRes, profilesRes, sousTypesRes, modelesRes] = await Promise.all([
     supabase

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminPrimesPage() {
   const admin = await requireAdmin();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const [sousTypesRes, paliersRes, optionsRes, usageRes] = await Promise.all([
     supabase

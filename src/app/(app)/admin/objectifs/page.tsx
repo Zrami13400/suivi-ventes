@@ -17,7 +17,7 @@ const PERIODE_LABEL: Record<string, string> = {
 
 export default async function AdminObjectifsPage() {
   const admin = await requireAdmin();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const [vendeursRes, objectifsRes, planningRes] = await Promise.all([
     supabase

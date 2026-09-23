@@ -37,7 +37,7 @@ export default async function AppLayout({
     );
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: shop } = await supabase
     .from("shops")
     .select("nom")

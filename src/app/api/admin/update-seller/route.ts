@@ -32,7 +32,7 @@ function generatePassword(length = 12): string {
 //  - sinon : édition complète (nom_complet, email, avatar, password
 //    optionnels — un champ vide ou inchangé n'est pas modifié).
 export async function POST(request: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

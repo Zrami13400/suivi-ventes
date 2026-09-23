@@ -13,10 +13,11 @@ import { loadShopMonth } from "@/lib/shop-month";
 export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { mois?: string };
+  searchParams: Promise<{ mois?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const admin = await requireAdmin();
   const mois = /^\d{4}-\d{2}$/.test(searchParams.mois ?? "")
     ? (searchParams.mois as string)

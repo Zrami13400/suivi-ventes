@@ -77,10 +77,11 @@ function formatJour(day: string): string {
 }
 
 export default async function VentesPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { p?: string; du?: string; au?: string; acte?: string; s?: string; nc?: string };
+  searchParams: Promise<{ p?: string; du?: string; au?: string; acte?: string; s?: string; nc?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const profile = await getCurrentProfileOrNull();
   if (!profile) return null;
 
@@ -97,7 +98,7 @@ export default async function VentesPage({
   const { start, end } = resolvePeriode(periode, today, searchParams.du, searchParams.au);
   const isAdmin = profile.role === "admin";
 
-  const supabase = createClient();
+  const supabase = await createClient();
   let ventesQuery = supabase
     .from("ventes")
     .select("*")

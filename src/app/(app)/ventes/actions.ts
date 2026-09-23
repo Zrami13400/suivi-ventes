@@ -16,7 +16,7 @@ export async function annulerVente(
   motif: string,
 ): Promise<{ error: string | null }> {
   const profile = await getCurrentProfile();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: vente, error: readErr } = await supabase
     .from("ventes")

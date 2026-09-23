@@ -2,10 +2,6 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
-  // Transmis au layout (via next/headers) pour masquer le bandeau générique
-  // sur /dashboard, qui a son propre bloc identité + motivation.
-  request.headers.set("x-pathname", request.nextUrl.pathname);
-
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
