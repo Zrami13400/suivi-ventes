@@ -57,3 +57,24 @@ export function presenceStreak(planning: Planning[], todayISO: string): number {
   }
   return streak;
 }
+
+/**
+ * Plus longue série de jours "present" consécutifs jusqu'à `todayISO` inclus
+ * (record personnel affiché sur l'accueil).
+ */
+export function presenceRecord(planning: Planning[], todayISO: string): number {
+  const dates = planning
+    .filter((p) => p.statut === "present" && p.date <= todayISO)
+    .map((p) => p.date)
+    .sort();
+  let best = 0;
+  let run = 0;
+  let prev: number | null = null;
+  for (const iso of dates) {
+    const t = Date.parse(`${iso}T00:00:00Z`);
+    run = prev !== null && t - prev === 86_400_000 ? run + 1 : prev === t ? run : 1;
+    prev = t;
+    if (run > best) best = run;
+  }
+  return best;
+}

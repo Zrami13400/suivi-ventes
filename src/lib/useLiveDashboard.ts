@@ -45,7 +45,7 @@ export interface LiveDashboardProps {
   mix: Record<CatKey, number>;
   dailyTargetMcafee: number;
   dailyTargetAssurance: number;
-  teammates: { id: string; nom_complet: string }[];
+  teammates: { id: string; nom_complet: string; avatar_url?: string | null }[];
 }
 
 export interface DefiCandidate {

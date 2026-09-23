@@ -13,10 +13,10 @@ import {
   totalActes,
   type CommissionBreakdown as Breakdown,
 } from "@/lib/kpi";
-import { joursTravailles, presenceStreak } from "@/lib/planning";
+import { joursTravailles, presenceRecord, presenceStreak } from "@/lib/planning";
 import { loadShopMonth } from "@/lib/shop-month";
 import { createClient } from "@/lib/supabase/server";
-import type { Vente } from "@/lib/types";
+import type { Planning, Vente } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -61,8 +61,11 @@ export default async function DashboardPage({
 
   const myStats = sm.ranking.find((r) => r.vendeur.id === profile.id) ?? null;
   const myPrimeMensuelle = sm.primeMensuelleByVendeur.get(profile.id) ?? null;
-  const presenceStreakDays = presenceStreak(myPlanning, today);
-  const teammates = sm.sellers.map((s) => ({ id: s.id, nom_complet: s.nom_complet }));
+  const teammates = sm.sellers.map((s) => ({
+    id: s.id,
+    nom_complet: s.nom_complet,
+    avatar_url: s.avatar_url,
+  }));
 
   // --- Données additionnelles pour le shell mobile (5 onglets) -----------
   const initialTab = isDashboardTab(searchParams.tab) ? searchParams.tab : "accueil";
@@ -78,6 +81,24 @@ export default async function DashboardPage({
     .gte("created_at", twoYearsAgo.toISOString())
     .order("created_at", { ascending: false });
   const sellerVentesExtended = (extRows ?? []) as Vente[];
+
+  // Série de présence + record : historique d'un an (le planning du mois
+  // seul couperait la série au 1er du mois).
+  const oneYearAgo = new Date();
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+  const [{ data: planningRows }, { data: shop }] = await Promise.all([
+    supabase
+      .from("planning")
+      .select("*")
+      .eq("vendeur_id", profile.id)
+      .gte("date", oneYearAgo.toISOString().slice(0, 10))
+      .lte("date", today),
+    supabase.from("shops").select("nom").eq("id", profile.shop_id).maybeSingle(),
+  ]);
+  const planningHistory = (planningRows ?? []) as Planning[];
+  const presenceStreakDays = presenceStreak(planningHistory, today);
+  const presenceRecordDays = presenceRecord(planningHistory, today);
+  const shopNom = (shop?.nom as string | undefined) ?? null;
 
   const primesJourMine = sm.primesJourByVendeur.get(profile.id) ?? [];
   const last7 = [...Array(7)].map((_, i) => {
@@ -148,6 +169,8 @@ export default async function DashboardPage({
           dailyTargetMcafee={dailyTargetMcafee}
           dailyTargetAssurance={dailyTargetAssurance}
           presenceStreakDays={presenceStreakDays}
+          presenceRecord={presenceRecordDays}
+          shopNom={shopNom}
           rang={myStats?.rang ?? null}
           totalSellers={sm.sellers.length}
           teammates={teammates}
@@ -178,6 +201,9 @@ export default async function DashboardPage({
           mix,
           dailyTargetMcafee,
           dailyTargetAssurance,
+          presenceStreakDays,
+          presenceRecord: presenceRecordDays,
+          shopNom,
           rang: myStats?.rang ?? null,
           totalSellers: sm.sellers.length,
           teammates,

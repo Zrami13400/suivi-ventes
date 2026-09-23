@@ -2,18 +2,9 @@
 
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { CommissionBreakdown as Breakdown, CatKey, RankRow } from "@/lib/kpi";
-import type {
-  ModeleTelephone,
-  OptionFlat,
-  Objectif,
-  PalierPrime,
-  PrimeMensuelle,
-  ReglePrime,
-  Role,
-  SousTypeActe,
-  Vente,
-} from "@/lib/types";
+import type { CommissionBreakdown as Breakdown, RankRow } from "@/lib/kpi";
+import type { Role, Vente } from "@/lib/types";
+import type { AccueilDashboardProps } from "../accueil/AccueilDashboard";
 import { AccueilTab } from "./AccueilTab";
 import { type DashboardTab, useDashboardTab } from "./DashboardTabContext";
 import { EquipeTab } from "./EquipeTab";
@@ -21,32 +12,7 @@ import { PlusTab } from "./PlusTab";
 import { PrimeTab } from "./PrimeTab";
 import { StatsTab } from "./StatsTab";
 
-interface AccueilProps {
-  vendeurId: string;
-  nomComplet: string;
-  avatarUrl: string | null;
-  role: string;
-  shopId: string;
-  today: string;
-  moisDate: string;
-  regles: ReglePrime[];
-  paliers: PalierPrime[];
-  sousTypes: SousTypeActe[];
-  modeles: ModeleTelephone[];
-  options: OptionFlat[] | null;
-  objectifs: Objectif[];
-  objectifsBoutiqueMois: Partial<Record<string, number>>;
-  initialSellerVentesMois: Vente[];
-  initialShopVentesMois: Vente[];
-  initialPrimeMensuelle: PrimeMensuelle | null;
-  sellerDailyTarget: number;
-  mix: Record<CatKey, number>;
-  dailyTargetMcafee: number;
-  dailyTargetAssurance: number;
-  rang: number | null;
-  totalSellers: number;
-  teammates: { id: string; nom_complet: string }[];
-}
+type AccueilProps = Omit<AccueilDashboardProps, "fabBump" | "onPrimeTotal">;
 
 interface Props {
   initialTab: DashboardTab;
