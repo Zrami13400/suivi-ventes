@@ -706,6 +706,59 @@ export function objectifBoutiqueJour(
   return global ? Math.round(parJour(global)) : 0;
 }
 
+export interface ObjectifJourVendeur {
+  /** Cible du jour par catégorie (0 si aucune cible pour ce type d'acte). */
+  parCategorie: Record<CatKey, number>;
+  /** Cible d'actes totale du jour. */
+  total: number;
+  /** Provenance : objectifs individuels du vendeur, ou repli boutique. */
+  source: "vendeur" | "boutique" | null;
+}
+
+/**
+ * Objectifs du jour d'un vendeur : ses objectifs individuels en priorité,
+ * repli sur ceux de la boutique uniquement s'il n'en a aucun ce jour-là
+ * (pas de mélange acte par acte). Le total est la somme des cibles par type
+ * d'acte, ou à défaut l'ancien objectif global (acte_type null).
+ */
+export function objectifsJourVendeur(
+  objectifs: ObjectifLike[],
+  vendeurId: string,
+  today: string = new Date().toISOString().slice(0, 10),
+  joursTravailles?: number | null,
+): ObjectifJourVendeur {
+  const volToday = objectifs.filter(
+    (o) => o.type_cible === "volume" && couvre(o, today) && cible(o) > 0,
+  );
+  const hasPerso = volToday.some((o) => o.vendeur_id === vendeurId);
+  const owner = hasPerso ? vendeurId : null;
+  const scoped = volToday.filter((o) => o.vendeur_id === owner);
+  const jours = owner ? joursTravailles : null;
+
+  const parCategorie = emptyByCat();
+  for (const c of CATEGORIES) {
+    parCategorie[c.key] = Math.round(
+      objectifVolumeJour(scoped, c.acte, today, {
+        vendeurId: owner,
+        joursTravailles: jours,
+      }),
+    );
+  }
+  let total = parCategorie.freebox + parCategorie.forfaits + parCategorie.telephones;
+
+  if (total === 0) {
+    // Repli : ancien objectif global (acte_type null) de la même portée.
+    const global = scoped.find((o) => o.acte_type === null);
+    if (global) total = Math.round(parJour(global, jours));
+  }
+
+  return {
+    parCategorie,
+    total,
+    source: total > 0 ? (hasPerso ? "vendeur" : "boutique") : null,
+  };
+}
+
 /** Cible d'actes totale du jour pour un vendeur (tous types confondus). */
 export function objectifJourVendeur(
   objectifs: ObjectifLike[],
@@ -713,21 +766,5 @@ export function objectifJourVendeur(
   today: string = new Date().toISOString().slice(0, 10),
   joursTravailles?: number | null,
 ): number {
-  const total = ["Freebox", "Forfait mobile", "Téléphone"].reduce(
-    (s, acte) =>
-      s +
-      objectifVolumeJour(objectifs, acte, today, { vendeurId, joursTravailles }),
-    0,
-  );
-  if (total > 0) return Math.round(total);
-
-  // Repli : ancien objectif global individuel (acte_type null).
-  const global = objectifs.find(
-    (o) =>
-      o.vendeur_id === vendeurId &&
-      o.acte_type === null &&
-      o.type_cible === "volume" &&
-      couvre(o, today),
-  );
-  return global ? Math.round(parJour(global, joursTravailles)) : 0;
+  return objectifsJourVendeur(objectifs, vendeurId, today, joursTravailles).total;
 }

@@ -19,7 +19,7 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { firstName, formatMoney, motivation, pct } from "@/lib/format";
-import { computeCommission, mostFrequentActeType, objectifVolumeJour } from "@/lib/kpi";
+import { computeCommission, mostFrequentActeType } from "@/lib/kpi";
 import { CATEGORIES, type ActeType } from "@/lib/constants";
 import { useLiveDashboard, type LiveDashboardProps } from "@/lib/useLiveDashboard";
 import { ActeEntrySheet } from "../ActeEntrySheet";
@@ -127,7 +127,6 @@ export function AccueilDashboard(props: AccueilDashboardProps) {
     rang,
     totalSellers,
     today,
-    objectifs,
     paliers,
     objectifsBoutiqueMois,
     sellerDailyTarget,
@@ -212,13 +211,12 @@ export function AccueilDashboard(props: AccueilDashboardProps) {
     };
   }, [paliers, sellerVentes]);
 
-  // --- Challenge du jour : type d'acte au plus gros objectif du jour -------
+  // --- Challenge du jour : type d'acte au plus gros objectif du jour du
+  // vendeur connecté (objCat : ses objectifs individuels, sinon boutique).
   const challenge = useMemo(() => {
     let best: { acte: ActeType; label: string; cible: number } | null = null;
     for (const c of CATEGORIES) {
-      const cible =
-        objCat[c.key] ||
-        Math.round(objectifVolumeJour(objectifs, c.acte, today));
+      const cible = objCat[c.key];
       if (cible > 0 && (!best || cible > best.cible)) {
         best = { acte: c.acte, label: c.label, cible };
       }
@@ -234,7 +232,7 @@ export function AccueilDashboard(props: AccueilDashboardProps) {
       .sort((a, b) => b.actes - a.actes || a.nom_complet.localeCompare(b.nom_complet));
     const scale = Math.max(best?.cible ?? 0, rows[0]?.actes ?? 0, 1);
     return { best, rows, scale };
-  }, [objCat, objectifs, today, shopVentes, teammates]);
+  }, [objCat, today, shopVentes, teammates]);
 
   const classementLabel = rang ? (
     <>

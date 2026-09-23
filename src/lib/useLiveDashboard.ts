@@ -42,6 +42,8 @@ export interface LiveDashboardProps {
   initialShopVentesMois: Vente[];
   initialPrimeMensuelle: PrimeMensuelle | null;
   sellerDailyTarget: number;
+  /** Objectifs du jour du vendeur par catégorie (individuels, sinon boutique). */
+  sellerDailyTargetParCat: Record<CatKey, number>;
   mix: Record<CatKey, number>;
   dailyTargetMcafee: number;
   dailyTargetAssurance: number;
@@ -77,6 +79,7 @@ export function useLiveDashboard(props: LiveDashboardProps) {
     initialShopVentesMois,
     initialPrimeMensuelle,
     sellerDailyTarget,
+    sellerDailyTargetParCat,
     mix,
     dailyTargetMcafee,
     dailyTargetAssurance,
@@ -233,7 +236,12 @@ export function useLiveDashboard(props: LiveDashboardProps) {
   );
   const ownActesToday = totalActes(ventesToday);
   const parCatToday = actesParCategorie(ventesToday);
-  const objCat = objectifJourParCategorie(sellerDailyTarget, mix);
+  // Cibles réelles par type d'acte ; répartition au mix de ventes seulement
+  // quand l'objectif n'existe qu'en global (acte_type null).
+  const hasCibleParCat = CATEGORIES.some((c) => sellerDailyTargetParCat[c.key] > 0);
+  const objCat = hasCibleParCat
+    ? sellerDailyTargetParCat
+    : objectifJourParCategorie(sellerDailyTarget, mix);
 
   const progressForForm = useMemo(() => {
     const out: Partial<Record<ActeType, { realise: number; cible: number }>> = {};

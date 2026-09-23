@@ -9,6 +9,7 @@ import {
   computeCommission,
   niveauPourActes,
   objectifJourVendeur,
+  objectifsJourVendeur,
   objectifVolumeJour,
   totalActes,
   type CommissionBreakdown as Breakdown,
@@ -41,12 +42,14 @@ export default async function DashboardPage({
     sm.range.start.slice(0, 10),
     today,
   );
-  const sellerDailyTarget = objectifJourVendeur(
+  const sellerObjectifs = objectifsJourVendeur(
     sm.objectifs,
     profile.id,
     today,
     joursTrav || null,
   );
+  const sellerDailyTarget = sellerObjectifs.total;
+  const sellerDailyTargetParCat = sellerObjectifs.parCategorie;
   const mix = categoryMix(ownVentesMonth.length ? ownVentesMonth : sm.ventes);
 
   const dailyTargetMcafee = objectifVolumeJour(sm.objectifs, "McAfee", today, {
@@ -166,6 +169,7 @@ export default async function DashboardPage({
           initialShopVentesMois={sm.ventes}
           initialPrimeMensuelle={myPrimeMensuelle}
           sellerDailyTarget={sellerDailyTarget}
+          sellerDailyTargetParCat={sellerDailyTargetParCat}
           mix={mix}
           dailyTargetMcafee={dailyTargetMcafee}
           dailyTargetAssurance={dailyTargetAssurance}
@@ -199,6 +203,7 @@ export default async function DashboardPage({
           initialShopVentesMois: sm.ventes,
           initialPrimeMensuelle: myPrimeMensuelle,
           sellerDailyTarget,
+          sellerDailyTargetParCat,
           mix,
           dailyTargetMcafee,
           dailyTargetAssurance,
