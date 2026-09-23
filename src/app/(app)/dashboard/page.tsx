@@ -15,7 +15,7 @@ import {
   type CommissionBreakdown as Breakdown,
 } from "@/lib/kpi";
 import { joursTravailles, presenceRecord, presenceStreak } from "@/lib/planning";
-import { loadShopMonth } from "@/lib/shop-month";
+import { loadPlanningBoutique, loadShopMonth } from "@/lib/shop-month";
 import { createClient } from "@/lib/supabase/server";
 import type { Planning, Vente } from "@/lib/types";
 
@@ -36,12 +36,18 @@ export default async function DashboardPage({
 
   const ownVentesMonth = sm.ventesByVendeur.get(profile.id) ?? [];
   const myPlanning = sm.planningByVendeur.get(profile.id) ?? [];
+  const planningBoutique = await loadPlanningBoutique(
+    profile.shop_id,
+    sm.objectifs,
+    today,
+  );
+  const myPlanningObjectifs = { vendeur: myPlanning, boutique: planningBoutique };
 
   const sellerObjectifs = objectifsJourVendeur(
     sm.objectifs,
     profile.id,
     today,
-    myPlanning,
+    myPlanningObjectifs,
   );
   const sellerDailyTarget = sellerObjectifs.total;
   const sellerDailyTargetParCat = sellerObjectifs.parCategorie;
@@ -49,13 +55,13 @@ export default async function DashboardPage({
 
   const dailyTargetMcafee = objectifVolumeJour(sm.objectifs, "McAfee", today, {
     vendeurId: profile.id,
-    planning: myPlanning,
+    planning: myPlanningObjectifs,
   });
   const dailyTargetAssurance = objectifVolumeJour(
     sm.objectifs,
     "Assurance",
     today,
-    { vendeurId: profile.id, planning: myPlanning },
+    { vendeurId: profile.id, planning: myPlanningObjectifs },
   );
 
   const myStats = sm.ranking.find((r) => r.vendeur.id === profile.id) ?? null;
@@ -113,7 +119,10 @@ export default async function DashboardPage({
     const pl = sm.planningByVendeur.get(s.id) ?? [];
     // Cible mensuelle = cible du jour × jours planifiés sur tout le mois.
     const jt = joursTravailles(pl, sm.range.start.slice(0, 10), sm.range.end.slice(0, 10));
-    const dailyT = objectifJourVendeur(sm.objectifs, s.id, today, pl);
+    const dailyT = objectifJourVendeur(sm.objectifs, s.id, today, {
+      vendeur: pl,
+      boutique: planningBoutique,
+    });
     targets[s.id] = Math.round(dailyT * (jt || 26));
   }
   const actesMoisPrecedent = Object.fromEntries(sm.actesMoisPrecedent);

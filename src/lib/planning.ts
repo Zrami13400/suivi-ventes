@@ -21,6 +21,24 @@ export function joursTravailles(
   ).length;
 }
 
+/**
+ * Nombre de jours d'ouverture de la boutique sur un intervalle inclus :
+ * dates distinctes où au moins un vendeur est "present".
+ */
+export function joursOuverts(
+  planning: Pick<Planning, "date" | "statut">[],
+  startISO: string,
+  endISO: string,
+): number {
+  const dates = new Set<string>();
+  for (const p of planning) {
+    if (p.statut === "present" && p.date >= startISO && p.date <= endISO) {
+      dates.add(p.date);
+    }
+  }
+  return dates.size;
+}
+
 /** Répartition des statuts sur une période. */
 export function repartitionStatuts(
   planning: Planning[],

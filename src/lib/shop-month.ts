@@ -1,3 +1,4 @@
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { currentMonth, monthRange } from "@/lib/format";
 import {
@@ -224,4 +225,43 @@ export async function loadShopMonth(
     ventesCollectivesOk,
     primesMensuellesOk: !primesMoisRes.error,
   };
+}
+
+/**
+ * Jours de présence planifiés de toute la boutique (dates + statut, sans
+ * vendeur) sur les périodes des objectifs boutique couvrant `today`, pour
+ * ramener ces objectifs au jour ouvré. La RLS ne laisse un vendeur lire que
+ * son propre planning : lecture via le client service-role, limitée aux
+ * dates. `null` si aucun objectif boutique de période ou lecture impossible
+ * (repli forfaitaire 6 / 26 jours).
+ */
+export async function loadPlanningBoutique(
+  shopId: string,
+  objectifs: Objectif[],
+  today: string,
+): Promise<Pick<Planning, "date" | "statut">[] | null> {
+  const periodes = objectifs.filter(
+    (o) =>
+      o.vendeur_id === null &&
+      o.periode !== "jour" &&
+      o.date_debut <= today &&
+      o.date_fin >= today,
+  );
+  if (periodes.length === 0) return null;
+  const start = periodes.reduce((m, o) => (o.date_debut < m ? o.date_debut : m), today);
+  const end = periodes.reduce((m, o) => (o.date_fin > m ? o.date_fin : m), today);
+
+  try {
+    const { data, error } = await createAdminClient()
+      .from("planning")
+      .select("date, statut")
+      .eq("shop_id", shopId)
+      .eq("statut", "present")
+      .gte("date", start)
+      .lte("date", end);
+    if (error) return null;
+    return (data ?? []) as Pick<Planning, "date" | "statut">[];
+  } catch {
+    return null;
+  }
 }

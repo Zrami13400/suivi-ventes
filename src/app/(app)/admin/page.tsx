@@ -8,7 +8,7 @@ import {
   totalActes,
   totalCommission,
 } from "@/lib/kpi";
-import { loadShopMonth } from "@/lib/shop-month";
+import { loadPlanningBoutique, loadShopMonth } from "@/lib/shop-month";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +25,7 @@ export default async function AdminOverviewPage({
 
   const today = todayISO();
   const sm = await loadShopMonth(admin.shop_id, mois);
+  const planningBoutique = await loadPlanningBoutique(admin.shop_id, sm.objectifs, today);
 
   const ventesToday = sm.ventes.filter((v) => v.created_at.slice(0, 10) === today);
   const moisObjSum =
@@ -84,13 +85,13 @@ export default async function AdminOverviewPage({
             Objectif boutique aujourd&apos;hui
           </p>
           <p className="mt-2 text-xl font-bold text-white tabular-nums">
-            {totalActes(ventesToday)} / {objectifBoutiqueJour(sm.objectifs, today) || "—"}
+            {totalActes(ventesToday)} / {objectifBoutiqueJour(sm.objectifs, today, planningBoutique) || "—"}
           </p>
           <div className="mt-2">
             <ProgressBar
               value={pct(
                 totalActes(ventesToday),
-                objectifBoutiqueJour(sm.objectifs, today),
+                objectifBoutiqueJour(sm.objectifs, today, planningBoutique),
               )}
               tone="violet"
             />
