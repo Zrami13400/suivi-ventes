@@ -64,6 +64,8 @@ export interface Vente {
   annulee_le?: string | null;
   annulee_par?: string | null;
   motif_annulation?: string | null;
+  /** Numéro client (migration 009), saisi pour les ventes Freebox. */
+  numero_client?: string | null;
 }
 
 export type VenteStatut = "validée" | "annulée";

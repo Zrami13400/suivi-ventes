@@ -39,6 +39,7 @@ export function ActeEntrySheet({
   onSuccess,
 }: Props) {
   const isTelephone = acteType === "Téléphone";
+  const isFreebox = acteType === "Freebox";
 
   const options = useMemo(
     () => sousTypes.filter((s) => s.acte_type === acteType),
@@ -61,6 +62,7 @@ export function ActeEntrySheet({
   const [sousTypeId, setSousTypeId] = useState<string | null>(null);
   const [modeleId, setModeleId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const [numeroClient, setNumeroClient] = useState("");
   // Ids des options flat cochées (catalogue admin, cf. options_flat).
   const [optionIds, setOptionIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -72,6 +74,7 @@ export function ActeEntrySheet({
     if (!open) return;
     const freq = mostFrequentSubProduct(sellerVentesMois, acteType);
     setQuantity(1);
+    setNumeroClient("");
     setOptionIds([]);
     setError(null);
     if (isTelephone) {
@@ -102,6 +105,7 @@ export function ActeEntrySheet({
       fd.set("quantity", String(quantity));
       if (sousTypeId) fd.set("sous_type_id", sousTypeId);
       if (modeleId) fd.set("modele_id", modeleId);
+      if (isFreebox && numeroClient.trim()) fd.set("numero_client", numeroClient.trim());
       for (const id of optionIds) fd.append("option_ids", id);
 
       const result = await createVente({ error: null, success: false }, fd);
@@ -194,6 +198,29 @@ export function ActeEntrySheet({
             </p>
           )}
         </div>
+
+        {isFreebox && (
+          <div>
+            <label
+              htmlFor="numero-client"
+              className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400"
+            >
+              Numéro client <span className="font-normal normal-case text-slate-500">(facultatif)</span>
+            </label>
+            <input
+              id="numero-client"
+              type="text"
+              inputMode="text"
+              autoComplete="off"
+              maxLength={64}
+              value={numeroClient}
+              onChange={(e) => setNumeroClient(e.target.value)}
+              placeholder="Ex. 12345678"
+              className="field min-h-[48px] text-base"
+            />
+            <p className="mt-1.5 text-xs text-slate-500">Facilite le suivi du dossier.</p>
+          </div>
+        )}
 
         <div>
           <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-400">

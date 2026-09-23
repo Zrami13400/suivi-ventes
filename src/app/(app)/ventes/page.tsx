@@ -79,7 +79,7 @@ function formatJour(day: string): string {
 export default async function VentesPage({
   searchParams,
 }: {
-  searchParams: { p?: string; du?: string; au?: string; acte?: string; s?: string };
+  searchParams: { p?: string; du?: string; au?: string; acte?: string; s?: string; nc?: string };
 }) {
   const profile = await getCurrentProfileOrNull();
   if (!profile) return null;
@@ -93,6 +93,7 @@ export default async function VentesPage({
   const statutFiltre: StatutFiltre = STATUTS.some((x) => x.key === searchParams.s)
     ? (searchParams.s as StatutFiltre)
     : "toutes";
+  const numeroClient = (searchParams.nc ?? "").trim().slice(0, 64);
   const { start, end } = resolvePeriode(periode, today, searchParams.du, searchParams.au);
   const isAdmin = profile.role === "admin";
 
@@ -105,6 +106,11 @@ export default async function VentesPage({
     .lt("created_at", `${addDays(end, 1)}T00:00:00Z`)
     .order("created_at", { ascending: false });
   if (acte) ventesQuery = ventesQuery.eq("acte_type", acte);
+  if (numeroClient) {
+    // Recherche partielle, insensible à la casse (jokers LIKE échappés).
+    const motif = numeroClient.replace(/[\\%_]/g, (c) => `\\${c}`);
+    ventesQuery = ventesQuery.ilike("numero_client", `%${motif}%`);
+  }
 
   const [ventesRes, sousTypesRes, reglesRes, modelesRes, optionsRes] = await Promise.all([
     ventesQuery,
@@ -158,6 +164,7 @@ export default async function VentesPage({
       p: periode,
       acte,
       s: statutFiltre === "toutes" ? null : statutFiltre,
+      nc: numeroClient || null,
       du: periode === "perso" ? start : null,
       au: periode === "perso" ? end : null,
       ...patch,
@@ -176,6 +183,44 @@ export default async function VentesPage({
 
       {/* Filtres */}
       <Card className="space-y-3">
+        <form key={numeroClient} action="/ventes" role="search" className="flex gap-2">
+          <input type="hidden" name="p" value={periode} />
+          {periode === "perso" && (
+            <>
+              <input type="hidden" name="du" value={start} />
+              <input type="hidden" name="au" value={end} />
+            </>
+          )}
+          {acte && <input type="hidden" name="acte" value={acte} />}
+          {statutFiltre !== "toutes" && <input type="hidden" name="s" value={statutFiltre} />}
+          <label className="sr-only" htmlFor="recherche-nc">
+            Numéro client
+          </label>
+          <input
+            id="recherche-nc"
+            type="search"
+            name="nc"
+            defaultValue={numeroClient}
+            maxLength={64}
+            autoComplete="off"
+            placeholder="Rechercher un numéro client…"
+            className="field min-w-0 flex-1"
+          />
+          <button type="submit" className="btn-primary shrink-0">
+            Rechercher
+          </button>
+          {numeroClient && (
+            <Link href={href({ nc: null })} scroll={false} className="btn-ghost shrink-0">
+              Effacer
+            </Link>
+          )}
+        </form>
+        {numeroClient && (
+          <p className="text-xs text-slate-400">
+            Ventes dont le numéro client contient « {numeroClient} », sur la période
+            sélectionnée.
+          </p>
+        )}
         <FilterRow label="Période">
           {PERIODES.map((x) => (
             <FilterChip
@@ -192,6 +237,7 @@ export default async function VentesPage({
             <input type="hidden" name="p" value="perso" />
             {acte && <input type="hidden" name="acte" value={acte} />}
             {statutFiltre !== "toutes" && <input type="hidden" name="s" value={statutFiltre} />}
+            {numeroClient && <input type="hidden" name="nc" value={numeroClient} />}
             <label className="text-xs text-slate-400">
               Du
               <input type="date" name="du" defaultValue={start} max={today} className="field mt-1" />
@@ -269,7 +315,10 @@ export default async function VentesPage({
 
       {lignes.length === 0 ? (
         <EmptyState>
-          Aucune vente sur cette période. Les actes s&apos;enregistrent depuis
+          {numeroClient
+            ? `Aucune vente avec le numéro client « ${numeroClient} » sur cette période. `
+            : "Aucune vente sur cette période. "}
+          Les actes s&apos;enregistrent depuis
           l&apos;onglet{" "}
           <Link href="/dashboard" className="text-brand-soft underline">
             Accueil
@@ -303,8 +352,11 @@ export default async function VentesPage({
                       <td className={cx("whitespace-nowrap px-4 py-2.5", l.annulee && "line-through")}>
                         <ActeLabel acte={l.v.acte_type} />
                       </td>
-                      <td className={cx("px-4 py-2.5 text-slate-300", l.annulee && "line-through")}>
-                        {l.produit ?? "—"}
+                      <td className="px-4 py-2.5">
+                        <span className={cx("text-slate-300", l.annulee && "line-through")}>
+                          {l.produit ?? "—"}
+                        </span>
+                        {l.v.numero_client && <NumeroClient value={l.v.numero_client} />}
                       </td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-white">
                         {l.v.quantity}
@@ -350,12 +402,15 @@ export default async function VentesPage({
             {lignes.map((l) => (
               <li key={l.v.id} className={cx("card p-4", l.annulee && "opacity-50")}>
                 <div className="flex items-start justify-between gap-3">
-                  <div className={cx("min-w-0", l.annulee && "line-through")}>
-                    <ActeLabel acte={l.v.acte_type} />
-                    <p className="mt-0.5 truncate text-sm text-slate-300">
-                      {l.produit ?? "—"}
-                      <span className="text-slate-500"> × {l.v.quantity}</span>
-                    </p>
+                  <div className="min-w-0">
+                    <div className={cx(l.annulee && "line-through")}>
+                      <ActeLabel acte={l.v.acte_type} />
+                      <p className="mt-0.5 truncate text-sm text-slate-300">
+                        {l.produit ?? "—"}
+                        <span className="text-slate-500"> × {l.v.quantity}</span>
+                      </p>
+                    </div>
+                    {l.v.numero_client && <NumeroClient value={l.v.numero_client} />}
                   </div>
                   <div className="shrink-0 text-right">
                     <p
@@ -414,6 +469,14 @@ function StatutBadge({ annulee, motif }: { annulee: boolean; motif?: string | nu
     </span>
   ) : (
     <span className="chip bg-emerald-500/15 text-emerald-200">Validée</span>
+  );
+}
+
+function NumeroClient({ value }: { value: string }) {
+  return (
+    <p className="mt-0.5 truncate text-xs text-slate-500">
+      N° client <span className="font-mono text-slate-400">{value}</span>
+    </p>
   );
 }
 

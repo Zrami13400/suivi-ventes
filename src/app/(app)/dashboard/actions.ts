@@ -32,6 +32,11 @@ export async function createVente(
 
   const sousTypeRaw = String(formData.get("sous_type_id") ?? "").trim();
   const modeleRaw = String(formData.get("modele_id") ?? "").trim();
+  // Numéro client : facultatif, uniquement pour une vente Freebox.
+  const numero_client =
+    acte_type === "Freebox"
+      ? String(formData.get("numero_client") ?? "").trim().slice(0, 64) || null
+      : null;
   const supabase = createClient();
 
   // Options cochées : ids d'options_flat ("option_ids", multiple). Les
@@ -115,6 +120,8 @@ export async function createVente(
     ...(options ? { options } : {}),
     sous_type_id,
     modele_id,
+    // Colonne envoyée seulement si renseignée (migration 009 éventuellement absente).
+    ...(numero_client ? { numero_client } : {}),
   });
 
   if (error) {
