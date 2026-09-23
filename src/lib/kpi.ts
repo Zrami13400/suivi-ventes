@@ -16,12 +16,14 @@ import {
   type BadgeKey,
   type CategoryMeta,
 } from "./constants";
+import { joursTravailles } from "./planning";
 import type {
   ModeleTelephone,
   OptionBonusDetail,
   OptionFlat,
   OptionLegacyKey,
   PalierPrime,
+  Planning,
   PrimeMensuelle,
   Profile,
   ReglePrime,
@@ -640,14 +642,18 @@ function couvre(o: ObjectifLike, day: string): boolean {
 
 const PERIODE_JOURS: Record<string, number> = { jour: 1, semaine: 6, mois: 26 };
 
-/** Rapporte une cible de période à une cible journalière. */
-function parJour(o: ObjectifLike, joursTravailles?: number | null): number {
+/**
+ * Rapporte une cible de période à une cible journalière. Pour un objectif
+ * individuel, le diviseur est le nombre de jours "present" planifiés sur
+ * toute la période de l'objectif (date_debut → date_fin), comme affiché dans
+ * l'admin — et non les seuls jours déjà écoulés. Repli forfaitaire
+ * (6 / semaine, 26 / mois) si le planning de la période est vide.
+ */
+function parJour(o: ObjectifLike, planning?: Planning[] | null): number {
   const v = cible(o);
   if (o.periode === "jour") return v;
-  const diviseur =
-    joursTravailles && joursTravailles > 0
-      ? joursTravailles
-      : PERIODE_JOURS[o.periode] ?? 26;
+  const jt = planning ? joursTravailles(planning, o.date_debut, o.date_fin) : 0;
+  const diviseur = jt > 0 ? jt : PERIODE_JOURS[o.periode] ?? 26;
   return v / diviseur;
 }
 
@@ -660,7 +666,7 @@ export function objectifVolumeJour(
   objectifs: ObjectifLike[],
   acteType: string,
   today: string,
-  opts: { vendeurId?: string | null; joursTravailles?: number | null } = {},
+  opts: { vendeurId?: string | null; planning?: Planning[] | null } = {},
 ): number {
   const vol = objectifs.filter(
     (o) => o.type_cible === "volume" && couvre(o, today),
@@ -678,7 +684,7 @@ export function objectifVolumeJour(
 
   if (opts.vendeurId) {
     const perso = pickBest(forActe(vol.filter((o) => o.vendeur_id === opts.vendeurId)));
-    if (perso) return parJour(perso, opts.joursTravailles);
+    if (perso) return parJour(perso, opts.planning);
   }
   const boutique = pickBest(forActe(vol.filter((o) => o.vendeur_id === null)));
   return boutique ? parJour(boutique) : 0;
@@ -725,7 +731,7 @@ export function objectifsJourVendeur(
   objectifs: ObjectifLike[],
   vendeurId: string,
   today: string = new Date().toISOString().slice(0, 10),
-  joursTravailles?: number | null,
+  planning?: Planning[] | null,
 ): ObjectifJourVendeur {
   const volToday = objectifs.filter(
     (o) => o.type_cible === "volume" && couvre(o, today) && cible(o) > 0,
@@ -733,14 +739,14 @@ export function objectifsJourVendeur(
   const hasPerso = volToday.some((o) => o.vendeur_id === vendeurId);
   const owner = hasPerso ? vendeurId : null;
   const scoped = volToday.filter((o) => o.vendeur_id === owner);
-  const jours = owner ? joursTravailles : null;
+  const plan = owner ? planning : null;
 
   const parCategorie = emptyByCat();
   for (const c of CATEGORIES) {
     parCategorie[c.key] = Math.round(
       objectifVolumeJour(scoped, c.acte, today, {
         vendeurId: owner,
-        joursTravailles: jours,
+        planning: plan,
       }),
     );
   }
@@ -749,7 +755,7 @@ export function objectifsJourVendeur(
   if (total === 0) {
     // Repli : ancien objectif global (acte_type null) de la même portée.
     const global = scoped.find((o) => o.acte_type === null);
-    if (global) total = Math.round(parJour(global, jours));
+    if (global) total = Math.round(parJour(global, plan));
   }
 
   return {
@@ -764,7 +770,7 @@ export function objectifJourVendeur(
   objectifs: ObjectifLike[],
   vendeurId: string,
   today: string = new Date().toISOString().slice(0, 10),
-  joursTravailles?: number | null,
+  planning?: Planning[] | null,
 ): number {
-  return objectifsJourVendeur(objectifs, vendeurId, today, joursTravailles).total;
+  return objectifsJourVendeur(objectifs, vendeurId, today, planning).total;
 }

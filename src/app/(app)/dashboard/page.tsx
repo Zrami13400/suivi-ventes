@@ -37,16 +37,11 @@ export default async function DashboardPage({
   const ownVentesMonth = sm.ventesByVendeur.get(profile.id) ?? [];
   const myPlanning = sm.planningByVendeur.get(profile.id) ?? [];
 
-  const joursTrav = joursTravailles(
-    myPlanning,
-    sm.range.start.slice(0, 10),
-    today,
-  );
   const sellerObjectifs = objectifsJourVendeur(
     sm.objectifs,
     profile.id,
     today,
-    joursTrav || null,
+    myPlanning,
   );
   const sellerDailyTarget = sellerObjectifs.total;
   const sellerDailyTargetParCat = sellerObjectifs.parCategorie;
@@ -54,13 +49,13 @@ export default async function DashboardPage({
 
   const dailyTargetMcafee = objectifVolumeJour(sm.objectifs, "McAfee", today, {
     vendeurId: profile.id,
-    joursTravailles: joursTrav || null,
+    planning: myPlanning,
   });
   const dailyTargetAssurance = objectifVolumeJour(
     sm.objectifs,
     "Assurance",
     today,
-    { vendeurId: profile.id, joursTravailles: joursTrav || null },
+    { vendeurId: profile.id, planning: myPlanning },
   );
 
   const myStats = sm.ranking.find((r) => r.vendeur.id === profile.id) ?? null;
@@ -116,8 +111,9 @@ export default async function DashboardPage({
   const targets: Record<string, number> = {};
   for (const s of sm.sellers) {
     const pl = sm.planningByVendeur.get(s.id) ?? [];
-    const jt = joursTravailles(pl, sm.range.start.slice(0, 10), today);
-    const dailyT = objectifJourVendeur(sm.objectifs, s.id, today, jt || null);
+    // Cible mensuelle = cible du jour × jours planifiés sur tout le mois.
+    const jt = joursTravailles(pl, sm.range.start.slice(0, 10), sm.range.end.slice(0, 10));
+    const dailyT = objectifJourVendeur(sm.objectifs, s.id, today, pl);
     targets[s.id] = Math.round(dailyT * (jt || 26));
   }
   const actesMoisPrecedent = Object.fromEntries(sm.actesMoisPrecedent);
