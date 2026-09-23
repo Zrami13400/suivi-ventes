@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
-import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import { useActionState, useMemo, useRef, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import {
   addSousType,
@@ -241,8 +241,6 @@ function toRows(options: OptionFlat[]): OptionRow[] {
   }));
 }
 
-let tmpSeq = 0;
-
 function OptionsEditor({
   options,
   usage,
@@ -251,12 +249,16 @@ function OptionsEditor({
   usage: Record<string, number>;
 }) {
   const [rows, setRows] = useState<OptionRow[]>(() => toRows(options ?? []));
+  const tmpSeq = useRef(0);
 
   // Resynchronise après enregistrement : la page serveur est revalidée et
-  // renvoie les ids des options nouvellement créées.
-  useEffect(() => {
+  // renvoie les ids des options nouvellement créées. Ajusté pendant le rendu
+  // (et non dans un effet) pour éviter un rendu intermédiaire périmé.
+  const [prevOptions, setPrevOptions] = useState(options);
+  if (options !== prevOptions) {
+    setPrevOptions(options);
     setRows(toRows(options ?? []));
-  }, [options]);
+  }
 
   const payload = useMemo(() => {
     const ordreParActe = new Map<string, number>();
@@ -308,10 +310,11 @@ function OptionsEditor({
   }
 
   function add(acte_type: string) {
-    tmpSeq += 1;
+    tmpSeq.current += 1;
+    const key = `new-${tmpSeq.current}`;
     setRows((prev) => [
       ...prev,
-      { key: `new-${tmpSeq}`, id: null, nom: "", acte_type, montant: "0", actif: true },
+      { key, id: null, nom: "", acte_type, montant: "0", actif: true },
     ]);
   }
 

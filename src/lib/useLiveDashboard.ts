@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { firstName } from "@/lib/format";
 import {
@@ -97,11 +97,7 @@ export function useLiveDashboard(props: LiveDashboardProps) {
   // demanderaient le même topic `accueil-<vendeurId>` ; supabase-js
   // dédoublonne par topic et renverrait le channel déjà `subscribe()`d à la
   // seconde instance, qui plante alors en appelant `.on()` après coup.
-  const instanceIdRef = useRef<string>(
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : Math.random().toString(36).slice(2),
-  );
+  const instanceId = useId();
 
   const todayTotalsRef = useRef<Map<string, number>>(new Map());
   useEffect(() => {
@@ -117,7 +113,7 @@ export function useLiveDashboard(props: LiveDashboardProps) {
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
-      .channel(`accueil-${vendeurId}-${instanceIdRef.current}`)
+      .channel(`accueil-${vendeurId}-${instanceId}`)
       .on(
         "postgres_changes",
         {
@@ -199,7 +195,7 @@ export function useLiveDashboard(props: LiveDashboardProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [vendeurId, shopId, moisDate, today, objectifs, teammates]);
+  }, [vendeurId, shopId, moisDate, today, objectifs, teammates, instanceId]);
 
   useEffect(() => {
     if (toasts.length === 0) return;

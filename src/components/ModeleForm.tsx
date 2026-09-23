@@ -12,11 +12,13 @@ import { cx } from "./ui";
 
 function ModeleRow({ modele }: { modele: ModeleTelephone }) {
   const [editing, setEditing] = useState(false);
+  // Figé au montage : Date.now() ne peut pas être appelé pendant le rendu.
+  const [now] = useState(() => Date.now());
 
   if (!editing) {
     const expired =
       modele.mois_validite != null &&
-      Date.now() - new Date(modele.updated_at).getTime() >
+      now - new Date(modele.updated_at).getTime() >
         modele.mois_validite * 30 * 24 * 60 * 60 * 1000;
     return (
       <tr>

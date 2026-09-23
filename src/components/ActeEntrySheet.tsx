@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createVente } from "@/app/(app)/dashboard/actions";
 import type { ActeType } from "@/lib/constants";
 import { formatMoney } from "@/lib/format";
@@ -70,22 +70,27 @@ export function ActeEntrySheet({
 
   // Réinitialise et présélectionne le sous-produit le plus vendu à chaque
   // ouverture, pour qu'une vente classique se confirme en deux taps.
-  useEffect(() => {
-    if (!open) return;
-    const freq = mostFrequentSubProduct(sellerVentesMois, acteType);
-    setQuantity(1);
-    setNumeroClient("");
-    setOptionIds([]);
-    setError(null);
-    if (isTelephone) {
-      setModeleId(freq.modeleId ?? modelesUtilisables[0]?.id ?? null);
-      setSousTypeId(null);
-    } else {
-      setSousTypeId(freq.sousTypeId ?? options[0]?.id ?? null);
-      setModeleId(null);
+  // Ajusté pendant le rendu (et non dans un effet) : la feuille s'ouvre
+  // directement avec les bonnes valeurs, sans rendu intermédiaire.
+  const openKey = open ? acteType : null;
+  const [prevOpenKey, setPrevOpenKey] = useState<ActeType | null>(null);
+  if (openKey !== prevOpenKey) {
+    setPrevOpenKey(openKey);
+    if (openKey) {
+      const freq = mostFrequentSubProduct(sellerVentesMois, acteType);
+      setQuantity(1);
+      setNumeroClient("");
+      setOptionIds([]);
+      setError(null);
+      if (isTelephone) {
+        setModeleId(freq.modeleId ?? modelesUtilisables[0]?.id ?? null);
+        setSousTypeId(null);
+      } else {
+        setSousTypeId(freq.sousTypeId ?? options[0]?.id ?? null);
+        setModeleId(null);
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, acteType]);
+  }
 
   const flatOptions = useMemo(() => optionsActives(pb, acteType), [pb, acteType]);
 
