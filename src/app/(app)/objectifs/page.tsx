@@ -24,6 +24,14 @@ const OPTIONS_PAR_ACTE: Partial<Record<ActeType, { key: OptionKey; label: string
   Téléphone: { key: "Assurance", label: "Assurance mobile" },
 };
 
+/** Unité affichée à la place de « actes » : [singulier, pluriel]. */
+const UNITE_PAR_ACTE: Record<ActeType, [string, string]> = {
+  Freebox: ["Freebox", "Freebox"],
+  "Forfait mobile": ["forfait", "forfaits"],
+  Téléphone: ["téléphone", "téléphones"],
+};
+const unite = (acte: ActeType, n: number) => UNITE_PAR_ACTE[acte][Math.abs(n) > 1 ? 1 : 0];
+
 type Source = "perso" | "boutique";
 interface Choix {
   row: ProgressionObjectif;
@@ -110,7 +118,7 @@ export default async function ObjectifsPage() {
                   titre="Volume — mois"
                   realise={realiseMois(c.acte)}
                   cible={null}
-                  suffixe=" actes"
+                  unite={(n) => ` ${unite(c.acte, n)}`}
                 />
               ) : (
                 <div className="space-y-4">
@@ -121,7 +129,7 @@ export default async function ObjectifsPage() {
                       source={obj.source}
                       realise={Number(obj.row.volume_realise ?? 0)}
                       cible={Number(obj.row.valeur_cible ?? 0)}
-                      suffixe=" actes"
+                      unite={(n) => ` ${unite(c.acte, n)}`}
                       jours={obj.row.jours_travailles}
                     />
                   ))}
@@ -171,14 +179,14 @@ function MainBar({
   source,
   realise,
   cible,
-  suffixe,
+  unite: uniteDe,
   jours,
 }: {
   titre: string;
   source?: Source;
   realise: number;
   cible: number | null;
-  suffixe: string;
+  unite: (n: number) => string;
   jours?: number | null;
 }) {
   const aCible = cible != null && cible > 0;
@@ -192,12 +200,12 @@ function MainBar({
       <div className="mt-1.5 flex items-baseline justify-between text-sm">
         <span className="font-medium tabular-nums text-white">
           {realise}
-          {suffixe}
+          {uniteDe(realise)}
           {aCible && (
             <span className="text-slate-400">
               {" "}
               / {cible}
-              {suffixe}
+              {uniteDe(cible)}
             </span>
           )}
         </span>
@@ -243,7 +251,7 @@ function OptionBlock({
         realise={t.taux}
         cible={cibleTaux > 0 ? cibleTaux : null}
         suffixe="%"
-        detail={`${t.attaches} / ${t.base} ${parent} ce mois`}
+        detail={`${t.attaches} / ${t.base} ${unite(parent, t.base)} ce mois`}
       />
       {volume && (
         <OptionBar
