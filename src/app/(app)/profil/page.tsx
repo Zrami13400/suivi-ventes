@@ -18,6 +18,11 @@ import {
 } from "@/lib/kpi";
 import { BADGES, NIVEAUX } from "@/lib/constants";
 import { CommissionBreakdown } from "@/components/CommissionBreakdown";
+import {
+  ChangePasswordForm,
+  EditOwnProfileForm,
+} from "@/components/ProfileSettings";
+import { createClient } from "@/lib/supabase/server";
 import { joursTravailles } from "@/lib/planning";
 import { loadShopMonth } from "@/lib/shop-month";
 
@@ -39,6 +44,11 @@ function streak(dates: Set<string>): number {
 export default async function ProfilPage() {
   const profile = await getCurrentProfileOrNull();
   if (!profile) return null;
+
+  const {
+    data: { user },
+  } = await createClient().auth.getUser();
+  const email = user?.email ?? "";
 
   const mois = currentMonth();
   const sm = await loadShopMonth(profile.shop_id, mois);
@@ -232,6 +242,24 @@ export default async function ProfilPage() {
           })}
         </div>
       </Card>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <SectionTitle>Mon profil</SectionTitle>
+          <EditOwnProfileForm
+            nomComplet={profile.nom_complet}
+            avatarUrl={profile.avatar_url}
+          />
+          <p className="mt-3 text-xs text-slate-500">
+            {email ? `Email : ${email} · ` : ""}Pour changer d&apos;email,
+            adresse-toi à l&apos;administrateur de la boutique.
+          </p>
+        </Card>
+        <Card>
+          <SectionTitle>Changer mon mot de passe</SectionTitle>
+          <ChangePasswordForm email={email} />
+        </Card>
+      </div>
 
       <p className="text-xs text-slate-500">
         Le détail de tes primes n&apos;est visible que par toi et par

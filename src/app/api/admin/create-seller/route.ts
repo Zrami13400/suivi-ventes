@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
+import { readAvatarFile, uploadAvatar } from "@/lib/avatar-upload";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
-
-const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
-const ALLOWED_AVATAR_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 
 function fail(error: string, status = 400) {
   return NextResponse.json({ error, success: false }, { status });
@@ -33,15 +31,9 @@ export async function POST(request: Request) {
     return fail("Le mot de passe doit contenir au moins 8 caractères.");
   }
 
-  let avatarFile: File | null = null;
-  if (avatarEntry instanceof File && avatarEntry.size > 0) {
-    if (!ALLOWED_AVATAR_TYPES.includes(avatarEntry.type)) {
-      return fail("Format d'image non supporté (PNG, JPEG, WebP ou GIF).");
-    }
-    if (avatarEntry.size > MAX_AVATAR_BYTES) {
-      return fail("L'image dépasse la taille maximale de 5 Mo.");
-    }
-    avatarFile = avatarEntry;
+  const avatarFile = readAvatarFile(avatarEntry);
+  if (avatarFile && "error" in avatarFile) {
+    return fail(avatarFile.error);
   }
 
   const supabaseAdmin = createAdminClient();
@@ -60,18 +52,17 @@ export async function POST(request: Request) {
 
   let avatar_url: string | null = null;
   if (avatarFile) {
-    const ext = avatarFile.name.split(".").pop()?.toLowerCase() || "jpg";
-    const path = `${admin.shop_id}/${userId}.${ext}`;
-    const buffer = Buffer.from(await avatarFile.arrayBuffer());
-    const { error: uploadErr } = await supabaseAdmin.storage
-      .from("avatars")
-      .upload(path, buffer, { contentType: avatarFile.type, upsert: true });
-    if (uploadErr) {
+    const uploaded = await uploadAvatar(
+      supabaseAdmin,
+      admin.shop_id,
+      userId,
+      avatarFile,
+    );
+    if ("error" in uploaded) {
       await supabaseAdmin.auth.admin.deleteUser(userId);
-      return fail("Échec de l'envoi de l'avatar : " + uploadErr.message);
+      return fail(uploaded.error);
     }
-    avatar_url = supabaseAdmin.storage.from("avatars").getPublicUrl(path).data
-      .publicUrl;
+    avatar_url = uploaded.url;
   }
 
   const { error: profileErr } = await supabaseAdmin.from("profiles").insert({

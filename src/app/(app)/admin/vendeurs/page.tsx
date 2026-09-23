@@ -1,5 +1,6 @@
 import AddSellerForm from "@/components/AddSellerForm";
 import { DeleteSellerButton } from "@/components/DeleteSellerButton";
+import { EditSellerButton } from "@/components/EditSellerButton";
 import { Avatar, Card, EmptyState, SectionTitle } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
 import { getUserEmails } from "@/lib/supabase/admin";
@@ -48,6 +49,14 @@ export default async function AdminVendeursPage() {
                     {emails.get(s.id) || "—"}
                   </p>
                 </div>
+                <EditSellerButton
+                  seller={{
+                    id: s.id,
+                    nom_complet: s.nom_complet,
+                    email: emails.get(s.id) ?? "",
+                    avatar_url: s.avatar_url,
+                  }}
+                />
                 <form action={deleteSeller}>
                   <input type="hidden" name="id" value={s.id} />
                   <DeleteSellerButton />
