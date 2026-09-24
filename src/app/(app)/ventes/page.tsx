@@ -199,7 +199,11 @@ export default async function VentesPage({
 
   return (
     <div className="space-y-5">
-      <LiveRefresh vendeurId={profile.id} shopId={profile.shop_id} />
+      <LiveRefresh
+        vendeurId={profile.id}
+        shopId={profile.shop_id}
+        toutesVentesBoutique={isAdmin}
+      />
       <SectionTitle>Mes ventes / Actes</SectionTitle>
 
       {/* Filtres */}
