@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import type {
   ModeleTelephone,
   OptionFlat,
+  Profile,
   ReglePrime,
   SousTypeActe,
   Vente,
@@ -42,6 +43,7 @@ const STATUTS = [
 type StatutFiltre = (typeof STATUTS)[number]["key"];
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function addDays(day: string, n: number): string {
   const d = new Date(`${day}T00:00:00Z`);
@@ -79,7 +81,7 @@ function formatJour(day: string): string {
 export default async function VentesPage({
   searchParams: searchParamsPromise,
 }: {
-  searchParams: Promise<{ p?: string; du?: string; au?: string; acte?: string; s?: string; nc?: string }>;
+  searchParams: Promise<{ p?: string; du?: string; au?: string; acte?: string; s?: string; nc?: string; v?: string }>;
 }) {
   const searchParams = await searchParamsPromise;
   const profile = await getCurrentProfileOrNull();
@@ -97,15 +99,22 @@ export default async function VentesPage({
   const numeroClient = (searchParams.nc ?? "").trim().slice(0, 64);
   const { start, end } = resolvePeriode(periode, today, searchParams.du, searchParams.au);
   const isAdmin = profile.role === "admin";
+  // Admin : toutes les ventes de la boutique, filtrables par vendeur.
+  const vendeurFiltre =
+    isAdmin && searchParams.v && UUID.test(searchParams.v) ? searchParams.v : null;
 
   const supabase = await createClient();
   let ventesQuery = supabase
     .from("ventes")
     .select("*")
-    .eq("vendeur_id", profile.id)
     .gte("created_at", `${start}T00:00:00Z`)
     .lt("created_at", `${addDays(end, 1)}T00:00:00Z`)
     .order("created_at", { ascending: false });
+  if (!isAdmin) ventesQuery = ventesQuery.eq("vendeur_id", profile.id);
+  else {
+    ventesQuery = ventesQuery.eq("shop_id", profile.shop_id);
+    if (vendeurFiltre) ventesQuery = ventesQuery.eq("vendeur_id", vendeurFiltre);
+  }
   if (acte) ventesQuery = ventesQuery.eq("acte_type", acte);
   if (numeroClient) {
     // Recherche partielle, insensible à la casse (jokers LIKE échappés).
@@ -113,15 +122,24 @@ export default async function VentesPage({
     ventesQuery = ventesQuery.ilike("numero_client", `%${motif}%`);
   }
 
-  const [ventesRes, sousTypesRes, reglesRes, modelesRes, optionsRes] = await Promise.all([
+  const [ventesRes, sousTypesRes, reglesRes, modelesRes, optionsRes, profilesRes] = await Promise.all([
     ventesQuery,
     supabase.from("sous_types_actes").select("*").eq("shop_id", profile.shop_id),
     supabase.from("regles_primes").select("*").eq("shop_id", profile.shop_id),
     supabase.from("modeles_telephones").select("*").eq("shop_id", profile.shop_id),
     supabase.from("options_flat").select("*").eq("shop_id", profile.shop_id),
+    isAdmin
+      ? supabase
+          .from("profiles")
+          .select("id, nom_complet")
+          .eq("shop_id", profile.shop_id)
+          .order("nom_complet")
+      : Promise.resolve({ data: [] }),
   ]);
 
   const ventes = (ventesRes.data ?? []) as Vente[];
+  const vendeurs = (profilesRes.data ?? []) as Pick<Profile, "id" | "nom_complet">[];
+  const nomVendeur = new Map(vendeurs.map((p) => [p.id, p.nom_complet]));
   const pb = priceBook(
     (sousTypesRes.data ?? []) as SousTypeActe[],
     (reglesRes.data ?? []) as ReglePrime[],
@@ -140,6 +158,7 @@ export default async function VentesPage({
     return {
       v,
       produit,
+      vendeur: nomVendeur.get(v.vendeur_id) ?? "—",
       annulee,
       commission: ligneCommission(v, pb),
       // Vendeur : ses ventes du jour seulement ; admin : toutes (cf. RLS 008).
@@ -166,6 +185,7 @@ export default async function VentesPage({
       acte,
       s: statutFiltre === "toutes" ? null : statutFiltre,
       nc: numeroClient || null,
+      v: vendeurFiltre,
       du: periode === "perso" ? start : null,
       au: periode === "perso" ? end : null,
       ...patch,
@@ -194,6 +214,7 @@ export default async function VentesPage({
           )}
           {acte && <input type="hidden" name="acte" value={acte} />}
           {statutFiltre !== "toutes" && <input type="hidden" name="s" value={statutFiltre} />}
+          {vendeurFiltre && <input type="hidden" name="v" value={vendeurFiltre} />}
           <label className="sr-only" htmlFor="recherche-nc">
             ID client
           </label>
@@ -239,6 +260,7 @@ export default async function VentesPage({
             {acte && <input type="hidden" name="acte" value={acte} />}
             {statutFiltre !== "toutes" && <input type="hidden" name="s" value={statutFiltre} />}
             {numeroClient && <input type="hidden" name="nc" value={numeroClient} />}
+            {vendeurFiltre && <input type="hidden" name="v" value={vendeurFiltre} />}
             <label className="text-xs text-slate-400">
               Du
               <input type="date" name="du" defaultValue={start} max={today} className="field mt-1" />
@@ -274,6 +296,18 @@ export default async function VentesPage({
               </FilterChip>
             ))}
           </FilterRow>
+          {isAdmin && vendeurs.length > 0 && (
+            <FilterRow label="Vendeur">
+              <FilterChip href={href({ v: null })} active={vendeurFiltre === null}>
+                Tous
+              </FilterChip>
+              {vendeurs.map((p) => (
+                <FilterChip key={p.id} href={href({ v: p.id })} active={vendeurFiltre === p.id}>
+                  {p.nom_complet}
+                </FilterChip>
+              ))}
+            </FilterRow>
+          )}
         </div>
       </Card>
 
@@ -335,6 +369,7 @@ export default async function VentesPage({
                 <thead className="border-b border-line text-left text-xs uppercase text-slate-500">
                   <tr>
                     <th className="px-4 py-3 font-medium">Date</th>
+                    {isAdmin && <th className="px-4 py-3 font-medium">Vendeur</th>}
                     <th className="px-4 py-3 font-medium">Acte</th>
                     <th className="px-4 py-3 font-medium">Produit</th>
                     <th className="px-4 py-3 font-medium">ID client</th>
@@ -351,6 +386,9 @@ export default async function VentesPage({
                       <td className="whitespace-nowrap px-4 py-2.5 text-slate-400">
                         {l.date} <span className="text-slate-500">· {l.heure}</span>
                       </td>
+                      {isAdmin && (
+                        <td className="whitespace-nowrap px-4 py-2.5 text-slate-300">{l.vendeur}</td>
+                      )}
                       <td className={cx("whitespace-nowrap px-4 py-2.5", l.annulee && "line-through")}>
                         <ActeLabel acte={l.v.acte_type} />
                       </td>
@@ -411,6 +449,9 @@ export default async function VentesPage({
               <li key={l.v.id} className={cx("card p-4", l.annulee && "opacity-50")}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
+                    {isAdmin && (
+                      <p className="mb-0.5 truncate text-xs font-medium text-slate-400">{l.vendeur}</p>
+                    )}
                     <div className={cx(l.annulee && "line-through")}>
                       <ActeLabel acte={l.v.acte_type} />
                       <p className="mt-0.5 truncate text-sm text-slate-300">
